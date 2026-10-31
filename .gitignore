@@ -1,0 +1,8 @@
+build/
+build-sim/
+*.xcodeproj
+Payload/
+Life.ipa
+screenshot/
+build.log
+Life/Info.plist

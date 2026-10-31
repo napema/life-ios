@@ -1,0 +1,110 @@
+# Compila Life su un Mac di GitHub: IPA non firmato (lo firma SideStore) e screenshot dal simulatore.
+name: Compila Life
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: compila
+  cancel-in-progress: true
+
+jobs:
+  compila:
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Strumenti
+        run: |
+          brew install xcodegen
+          xcodebuild -version
+          xcodegen generate
+
+      - name: Compila per iPhone
+        run: |
+          set -o pipefail
+          xcodebuild -project Life.xcodeproj -scheme Life -configuration Release -sdk iphoneos \
+            -destination 'generic/platform=iOS' -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            build 2>&1 | tee build.log | grep -E "error:|warning: unre|BUILD|\*\*" || true
+          test -d build/Build/Products/Release-iphoneos/Life.app
+
+      - name: Elenco degli errori
+        if: failure()
+        run: grep -E "error:" build.log | sort -u | head -150 || true
+
+      - name: Crea l'IPA
+        run: |
+          mkdir -p Payload
+          cp -R build/Build/Products/Release-iphoneos/Life.app Payload/
+          zip -qry Life.ipa Payload
+          ls -lh Life.ipa
+
+      - name: Screenshot dal simulatore
+        continue-on-error: true
+        run: |
+          set -x
+          xcodebuild -project Life.xcodeproj -scheme Life -configuration Debug -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' -derivedDataPath build-sim \
+            CODE_SIGNING_ALLOWED=NO build > /dev/null 2>&1
+          SIM=$(xcrun simctl list devices available -j | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; print(next(x['udid'] for k in sorted(d, reverse=True) for x in d[k] if 'iPhone' in x['name'] and 'Pro' in x['name']))")
+          xcrun simctl boot "$SIM"
+          xcrun simctl bootstatus "$SIM" -b
+          xcrun simctl install "$SIM" build-sim/Build/Products/Debug-iphonesimulator/Life.app
+          mkdir -p screenshot
+          for vista in login home oggi calendario programmate liste finanze abitudini training mobilita pasti impostazioni; do
+            xcrun simctl terminate "$SIM" it.life.app || true
+            SIMCTL_CHILD_LIFE_DEMO=$vista xcrun simctl launch "$SIM" it.life.app
+            sleep 7
+            xcrun simctl io "$SIM" screenshot "screenshot/$vista.png"
+          done
+
+      - name: Conserva i risultati
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: risultati
+          path: |
+            Life.ipa
+            build.log
+            screenshot/
+          if-no-files-found: warn
+
+      - name: Pubblica per SideStore
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSIONE=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" Payload/Life.app/Info.plist)
+          NUMERO=${{ github.run_number }}
+          DIMENSIONE=$(stat -f%z Life.ipa)
+          OGGI=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          URL="https://github.com/${{ github.repository }}/releases/download/ultima/Life.ipa"
+          cat > sorgente.json <<EOF
+          {
+            "name": "Life",
+            "identifier": "it.life.sorgente",
+            "apps": [{
+              "name": "Life",
+              "bundleIdentifier": "it.life.app",
+              "developerName": "Life",
+              "localizedDescription": "La mia app personale.",
+              "iconURL": "https://raw.githubusercontent.com/${{ github.repository }}/main/Life/Risorse/icona.png",
+              "versions": [{
+                "version": "$VERSIONE",
+                "buildVersion": "$NUMERO",
+                "date": "$OGGI",
+                "downloadURL": "$URL",
+                "size": $DIMENSIONE,
+                "minOSVersion": "17.0"
+              }]
+            }]
+          }
+          EOF
+          gh release delete ultima --yes --cleanup-tag || true
+          gh release create ultima Life.ipa sorgente.json --title "Life (build $NUMERO)" --notes "Compilata da GitHub: scaricala con SideStore."
