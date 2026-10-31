@@ -237,7 +237,7 @@ struct VistaCalendario: View {
                     .accessibilityElement()
                     .accessibilityIdentifier("calendario.visibile")
                     .accessibilityLabel(visibile ?? "")
-                EtichettaTraccia()
+                EtichettaBlocchi()
             }
         }
         .navigationTitle(titolo)
@@ -552,19 +552,9 @@ private final class BloccoPreso: ObservableObject {
     @Published var id: String?
 }
 
-final class TracciaDito: ObservableObject {
-    static let s = TracciaDito()
-    static let attiva = ProcessInfo.processInfo.environment["LIFE_DEMO"] != nil
-    @Published var righe = ""
-    func nota(_ t: String) {
-        if TracciaDito.attiva { righe += t + " | " }
-    }
-}
-
-private struct EtichettaTraccia: View {
-    @ObservedObject private var t = TracciaDito.s
+/// Solo per le prove automatiche: dice dove sono i blocchi sullo schermo.
+private struct EtichettaBlocchi: View {
     var body: some View {
-        Color.clear.frame(width: 2, height: 2).accessibilityElement().accessibilityIdentifier("calendario.dito").accessibilityLabel(t.righe)
         TimelineView(.periodic(from: .now, by: 0.5)) { _ in
             Color.clear.frame(width: 2, height: 2).accessibilityElement().accessibilityIdentifier("calendario.blocchi").accessibilityLabel(ControlloreDito.ultimo?.blocchiSulloSchermo() ?? "")
         }
@@ -689,17 +679,13 @@ private final class SondaDito: UIView {
             return
         }
         var v = superview
-        var catena: [String] = []
         while let c = v {
-            catena.append(String(describing: type(of: c)))
             if let s = c as? UIScrollView {
-                TracciaDito.s.nota("aggancio \(catena.joined(separator: ">")) contenuto \(s.contentSize) cornice \(s.frame)")
                 dito.aggancia(s, superficie: self)
                 return
             }
             v = c.superview
         }
-        TracciaDito.s.nota("nessuna scroll: \(catena.joined(separator: ">"))")
     }
 }
 
@@ -756,10 +742,7 @@ private final class ControlloreDito: NSObject, UIGestureRecognizerDelegate {
 
     func gestureRecognizer(_ g: UIGestureRecognizer, shouldReceive tocco: UITouch) -> Bool {
         guard let superficie, stato.presa == nil else { return false }
-        let p = tocco.location(in: superficie)
-        let b = bloccoSotto(p)
-        TracciaDito.s.nota("tocco \(Int(p.x)),\(Int(p.y)) x=\(Int(scorrimentoX())) col=\(Int(colonna)) i=\(indiceColonna(p.x)) blocco=\(b?.blocco.id ?? "-")")
-        return b != nil
+        return bloccoSotto(tocco.location(in: superficie)) != nil
     }
 
     // MARK: Cosa c'è sotto il dito
@@ -803,7 +786,6 @@ private final class ControlloreDito: NSObject, UIGestureRecognizerDelegate {
     @objc private func gestoLungo(_ g: UILongPressGestureRecognizer) {
         guard let superficie else { return }
         let p = g.location(in: superficie)
-        if g.state != .changed { TracciaDito.s.nota("lunga stato \(g.state.rawValue)") }
         switch g.state {
         case .began:
             guard let (b, giorno) = bloccoSotto(p) else {
@@ -975,7 +957,6 @@ private final class ControlloreDito: NSObject, UIGestureRecognizerDelegate {
     private func rilascia() {
         fermaDito()
         guard let p = stato.presa else { return }
-        TracciaDito.s.nota("rilascia \(p.giorno) \(p.inizio)-\(p.fine) cambiata \(p.cambiata)")
         if p.cambiata {
             salva(p)
             lascia()

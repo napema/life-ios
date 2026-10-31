@@ -3,8 +3,12 @@ import Foundation
 /// Dati finti per gli screenshot della compilazione (LIFE_DEMO): mai in uso sul telefono vero.
 enum Dimostrazione {
     static func carica() {
-        guard !Rete.s.connesso, Archivio.s.tutte("projects").isEmpty else { return }
+        guard !Rete.s.connesso else { return }
         let oggi = Tempo.oggi()
+        // L'evento su cui provano le dita: a ogni avvio torna al suo posto, vicino a dove si apre la griglia
+        let oraProva = min(21, minutiCalendario(Tempo.oraRoma(Date())) / 60 + 1)
+        Archivio.s.scrivi("events", ["id": "demo-e3", "calendar_id": "demo-cal", "title": "Riunione", "notes": nil, "location": nil, "start_at": .str(Tempo.iso(Tempo.istante(oggi, String(format: "%02d:00", oraProva)))), "end_at": .str(Tempo.iso(Tempo.istante(oggi, String(format: "%02d:30", oraProva + 1)))), "all_day": false, "rrule": nil, "deleted_at": nil], sincronizza: false)
+        guard Archivio.s.tutte("projects").isEmpty else { return }
         let inbox = "demo-inbox"
         let progetto = "demo-progetto"
         Archivio.s.scrivi("projects", [
@@ -21,7 +25,5 @@ enum Dimostrazione {
         }
         Archivio.s.scrivi("events", ["id": "demo-e1", "calendar_id": "demo-cal", "title": "Lezione", "notes": nil, "location": "Aula 3", "start_at": .str(Tempo.iso(Tempo.istante(oggi, "09:00"))), "end_at": .str(Tempo.iso(Tempo.istante(oggi, "10:30"))), "all_day": false, "rrule": nil, "deleted_at": nil])
         Archivio.s.scrivi("events", ["id": "demo-e2", "calendar_id": "demo-cal", "title": "Palestra", "notes": nil, "location": nil, "start_at": .str(Tempo.iso(Tempo.istante(oggi, "18:30"))), "end_at": .str(Tempo.iso(Tempo.istante(oggi, "19:30"))), "all_day": false, "rrule": nil, "deleted_at": nil])
-        let oraProva = min(21, minutiCalendario(Tempo.oraRoma(Date())) / 60 + 1)
-        Archivio.s.scrivi("events", ["id": "demo-e3", "calendar_id": "demo-cal", "title": "Riunione", "notes": nil, "location": nil, "start_at": .str(Tempo.iso(Tempo.istante(oggi, String(format: "%02d:00", oraProva)))), "end_at": .str(Tempo.iso(Tempo.istante(oggi, String(format: "%02d:30", oraProva + 1)))), "all_day": false, "rrule": nil, "deleted_at": nil])
     }
 }

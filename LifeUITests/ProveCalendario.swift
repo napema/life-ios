@@ -83,15 +83,6 @@ final class ProveCalendario: XCTestCase {
         app.descendants(matching: .any)[id].firstMatch
     }
 
-    /// Gli orari scritti nei blocchi: «09:00 – 10:30».
-    private func orari(_ app: XCUIApplication) -> Set<String> {
-        Set(app.staticTexts.allElementsBoundByIndex.map(\.label).filter { $0.contains(" – ") })
-    }
-
-    private func traccia(_ app: XCUIApplication, _ dove: String) {
-        print("TRACCIA \(dove): \(app.descendants(matching: .any)["calendario.dito"].firstMatch.label)")
-    }
-
     /// Dove l'app dice che è un blocco: il testo per l'accessibilità non cade esattamente sul blocco.
     private func rettangolo(_ app: XCUIApplication, _ nome: String = "Riunione") -> CGRect {
         let e = qualunque(app, "calendario.blocchi")
@@ -118,16 +109,14 @@ final class ProveCalendario: XCTestCase {
         let app = apri("day")
         let r = rettangolo(app)
         let da = punto(app, r.midX, r.midY)
-        let prima = orari(app)
         da.press(forDuration: 0.7, thenDragTo: da.withOffset(CGVector(dx: 0, dy: 90)), withVelocity: .slow, thenHoldForDuration: 0.3)
         Thread.sleep(forTimeInterval: 1)
         foto("sposta-1-dopo")
-        traccia(app, "sposta")
-        let dopo = orari(app)
-        XCTAssertNotEqual(prima, dopo, "L'evento non si è spostato")
+        let dopo = rettangolo(app)
+        // Un'ora è alta 60 punti: 90 punti di dito sono 90 minuti, a passi di 5
+        XCTAssertEqual(dopo.minY, r.minY + 90, accuracy: 6, "L'evento non è andato dove l'ha portato il dito")
+        XCTAssertEqual(dopo.height, r.height, accuracy: 1, "Spostandolo ha cambiato durata")
         XCTAssertFalse(app.navigationBars["Nuovo evento"].exists, "Il trascinamento ha aperto un nuovo evento")
-        XCTAssertEqual(rettangolo(app).height, r.height, accuracy: 1, "Spostandolo ha cambiato durata")
-        print("ORARI prima \(prima.sorted()) dopo \(dopo.sorted())")
         app.terminate()
     }
 
@@ -135,11 +124,9 @@ final class ProveCalendario: XCTestCase {
     func testTiraIlBordo() {
         let app = apri("day")
         let r = rettangolo(app)
-        let prima = orari(app)
         punto(app, r.midX, r.midY).press(forDuration: 0.7)
         Thread.sleep(forTimeInterval: 0.6)
         foto("bordi-1-selezionato")
-        traccia(app, "bordi")
         XCTAssertEqual(rettangolo(app).minY, r.minY, accuracy: 1, "Solo tenendo premuto l'evento non deve spostarsi")
         let c = punto(app, r.maxX - 16, r.maxY)
         c.press(forDuration: 0.1, thenDragTo: c.withOffset(CGVector(dx: 0, dy: 50)), withVelocity: .slow, thenHoldForDuration: 0.2)
@@ -148,7 +135,6 @@ final class ProveCalendario: XCTestCase {
         let dopo = rettangolo(app)
         XCTAssertGreaterThan(dopo.height, r.height + 30, "Il bordo non ha cambiato la durata")
         XCTAssertEqual(dopo.minY, r.minY, accuracy: 1, "Tirando la fine si è mosso l'inizio")
-        print("ORARI prima \(prima.sorted()) dopo \(orari(app).sorted())")
         app.terminate()
     }
 
@@ -161,7 +147,6 @@ final class ProveCalendario: XCTestCase {
         da.press(forDuration: 0.7, thenDragTo: da.withOffset(CGVector(dx: colonna, dy: 0)), withVelocity: .slow, thenHoldForDuration: 0.3)
         Thread.sleep(forTimeInterval: 1)
         foto("sposta-2-giorno-dopo")
-        traccia(app, "giorno-dopo")
         XCTAssertGreaterThan(rettangolo(app).minX, r.minX + colonna / 2, "L'evento è rimasto nel suo giorno")
         app.terminate()
     }
