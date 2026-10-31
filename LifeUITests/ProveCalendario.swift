@@ -196,12 +196,19 @@ final class ProveCalendario: XCTestCase {
     func testMenuFinanze() {
         let app = avvia("finanze")
         XCTAssertTrue(qualunque(app, "Altre azioni").waitForExistence(timeout: 8))
-        // Il dito dove si vedono i puntini: a destra, nella barra sopra le schede
-        app.coordinate(withNormalizedOffset: CGVector(dx: 0.853, dy: 0.868)).tap()
-        Thread.sleep(forTimeInterval: 1)
-        foto("finanze-menu")
-        XCTAssertTrue(qualunque(app, "Lista d'attesa").exists)
-        XCTAssertTrue(qualunque(app, "Pagamento previsto").exists)
+        // Il dito dove si vedono i puntini: a destra, nella barra sopra le schede. Deve aprirsi ogni volta
+        Thread.sleep(forTimeInterval: 4)
+        var aperture = 0
+        for i in 0..<5 {
+            app.coordinate(withNormalizedOffset: CGVector(dx: 0.853, dy: 0.868)).tap()
+            Thread.sleep(forTimeInterval: 1.2)
+            if qualunque(app, "Pagamento previsto").exists { aperture += 1 }
+            foto("finanze-menu-\(i)")
+            app.coordinate(withNormalizedOffset: CGVector(dx: 0.2, dy: 0.25)).tap()
+            Thread.sleep(forTimeInterval: 1)
+        }
+        print("MENU aperto \(aperture)/5")
+        XCTAssertEqual(aperture, 5, "I tre puntini non aprono il menu ogni volta")
         app.terminate()
     }
 }
