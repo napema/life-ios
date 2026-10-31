@@ -10,6 +10,9 @@ struct LifeApp: App {
     private let demo = ProcessInfo.processInfo.environment["LIFE_DEMO"]
 
     init() {
+        // JavaScript e archivio si preparano in parallelo, fuori dal thread principale
+        DispatchQueue.global(qos: .userInteractive).async { _ = Logica.s }
+        DispatchQueue.global(qos: .userInteractive).async { _ = Archivio.s }
         Notifiche.s.avvia()
         Notifiche.s.registraAttivita()
     }
@@ -62,6 +65,9 @@ struct LifeApp: App {
     }
 
     private func avvia() {
+        Misure.s.traguardo("primo frame")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { Logica.s.preparaLetture() }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 5) { Misure.s.salva() }
         Task { await collegaWidget() }
         if demo != nil { Dimostrazione.carica() }
         Logica.s.avvia()
@@ -165,7 +171,10 @@ struct Radice: View {
         switch vista {
         case "app", "cerca", "oggi": scheda = vista
         case "todo": instradatore.apri(.todo)
-        case "calendario": instradatore.apri(.calendario)
+        case "calendario":
+            if let modo = instradatore.schedaIniziale { Preferenze.s.modoCalendario = modo } else { Preferenze.s.modoCalendario = "day" }
+            instradatore.schedaIniziale = nil
+            instradatore.apri(.calendario)
         case "impostazioni": impostazioni = true
         case "widget": anteprimaWidget = true
         default:

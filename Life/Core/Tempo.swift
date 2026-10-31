@@ -36,7 +36,26 @@ enum Tempo {
     static func iso(_ d: Date) -> String { isoMs.string(from: d) }
     static func adessoIso() -> String { iso(Date()) }
 
+    private static let serraturaDate = NSLock()
+    private static var dateRicordate: [String: Date] = [:]
+
     static func data(_ s: String?) -> Date? {
+        guard let s else { return nil }
+        serraturaDate.lock()
+        let nota = dateRicordate[s]
+        serraturaDate.unlock()
+        if let nota { return nota }
+        let d = leggiData(s)
+        if let d {
+            serraturaDate.lock()
+            if dateRicordate.count > 20000 { dateRicordate.removeAll(keepingCapacity: true) }
+            dateRicordate[s] = d
+            serraturaDate.unlock()
+        }
+        return d
+    }
+
+    private static func leggiData(_ s: String?) -> Date? {
         guard let s, !s.isEmpty else { return nil }
         if let d = isoMs.date(from: s) ?? isoSec.date(from: s) { return d }
         // «2026-10-25 23:00:00+00», microsecondi e simili: si porta a una forma standard

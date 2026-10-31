@@ -41,7 +41,7 @@ struct Home: View {
         let fasce: [String: (Int, String)] = ["mattina": (7, "mattina"), "pomeriggio": (13, "pom."), "preWorkout": (17, "pre"), "sera": (20, "sera"), "qualsiasi": (23, "")]
 
         var agenda: [VoceAgenda] = eventi.map { e in
-            let l = e.own_event_id.isNull ? Lezione(e) : nil
+            let l = e.own_event_id.isNull ? Lezione.di(e) : nil
             let inizio = Tempo.oraRoma(e.start_at.str) ?? "00:00"
             let fine = Tempo.oraRoma(e.end_at.str) ?? "00:00"
             let orario = e.all_day.vero ? "Tutto il giorno" : "\(inizio) – \(fine)"

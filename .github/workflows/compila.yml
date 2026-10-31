@@ -110,11 +110,13 @@ jobs:
           xcrun simctl bootstatus "$SIM" -b
           xcrun simctl install "$SIM" build-sim/Build/Products/Debug-iphonesimulator/Life.app
           mkdir -p screenshot
-          for vista in login oggi app cerca widget todo todo:programmate todo:liste calendario finanze finanze:movimenti abitudini allenamenti mobilita pasti impostazioni; do
+          for vista in login oggi app cerca widget todo calendario calendario:three calendario:week calendario:month finanze finanze:movimenti abitudini allenamenti mobilita pasti impostazioni; do
             xcrun simctl terminate "$SIM" it.life.app || true
             SIMCTL_CHILD_LIFE_DEMO=$vista xcrun simctl launch "$SIM" it.life.app
             sleep 7
             xcrun simctl io "$SIM" screenshot "screenshot/${vista/:/-}.png"
+            sleep 1
+            cp "$(xcrun simctl get_app_container "$SIM" it.life.app data)/Documents/misure.json" "screenshot/misure-${vista/:/-}.json" || true
           done
           # Avvio vero, senza dati finti: deve arrivare all'accesso e restare aperta
           xcrun simctl terminate "$SIM" it.life.app || true

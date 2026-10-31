@@ -185,6 +185,11 @@ struct VistaImpostazioni: View {
                     Text(versione).foregroundStyle(Color.secondarioLife)
                 }
                 HStack {
+                    Text("Avvio")
+                    Spacer()
+                    Text(Misure.s.riepilogo).monospacedDigit().foregroundStyle(Color.secondarioLife)
+                }
+                HStack {
                     Text("Logica")
                     Spacer()
                     Text(versioneLogica).foregroundStyle(Color.secondarioLife)

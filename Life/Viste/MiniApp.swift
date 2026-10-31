@@ -217,16 +217,16 @@ struct MiniApp: View {
     private var calendario: some View {
         TabView(selection: $preferenze.modoCalendario) {
             Tab("Giorno", systemImage: "calendar.day.timeline.left", value: "day") {
-                Schermata(chiudi: { esci() }) { VistaCalendario() }
+                Schermata(chiudi: { esci() }) { VistaCalendario(modo: "day") }
             }
             Tab("3 giorni", systemImage: "rectangle.split.3x1", value: "three") {
-                Schermata(chiudi: { esci() }) { VistaCalendario() }
+                Schermata(chiudi: { esci() }) { VistaCalendario(modo: "three") }
             }
             Tab("Settimana", systemImage: "calendar.badge.clock", value: "week") {
-                Schermata(chiudi: { esci() }) { VistaCalendario() }
+                Schermata(chiudi: { esci() }) { VistaCalendario(modo: "week") }
             }
             Tab("Mese", systemImage: "calendar", value: "month") {
-                Schermata(chiudi: { esci() }) { VistaCalendario() }
+                Schermata(chiudi: { esci() }) { VistaCalendario(modo: "month") }
             }
         }
     }
@@ -254,13 +254,13 @@ struct BarraGestiFinanze: View {
 
 /// «Annulla» e gli avvisi stanno sopra qualsiasi mini-app.
 struct StratoAvvisi: ViewModifier {
-    @ObservedObject private var logica = Logica.s
+    @ObservedObject private var avvisi = Avvisi.s
     @ObservedObject private var annulla = Annulla.s
 
     func body(content: Content) -> some View {
         content
             .overlay(alignment: .top) {
-                if let a = logica.avviso {
+                if let a = avvisi.avviso {
                     AvvisoBanner(avviso: a)
                         .transition(.move(edge: .top).combined(with: .opacity))
                         .padding(.top, 8)
@@ -282,7 +282,7 @@ struct StratoAvvisi: ViewModifier {
                 }
             }
             .animation(.spring(duration: 0.3), value: annulla.etichetta)
-            .animation(.spring(duration: 0.3), value: logica.avviso)
+            .animation(.spring(duration: 0.3), value: avvisi.avviso)
     }
 }
 

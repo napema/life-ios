@@ -84,7 +84,11 @@ struct VistaTraining: View {
         .onAppear(perform: ripara)
     }
 
+    private static var riparato = false
+
     private func ripara() {
+        guard !Self.riparato else { return }
+        Self.riparato = true
         if tra("dati.riparaGiriComeRipetute").vero {
             avviso("Ho rimesso a posto gli allenamenti che una corsa aveva sovrascritto come «Ripetute».")
         }

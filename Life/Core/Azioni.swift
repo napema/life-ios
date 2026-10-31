@@ -105,7 +105,23 @@ enum Azioni {
     }
 
     /// Eventi (propri + .ics) che toccano [da, a), solo calendari visibili, ripetizioni espanse.
+    private static var eventiRicordati: [String: [J]] = [:]
+    private static var versioneEventi = -1
+
     static func eventi(da: String, a fine: String) -> [J] {
+        if versioneEventi != a.versione {
+            versioneEventi = a.versione
+            eventiRicordati = [:]
+        }
+        let chiave = "\(da)|\(fine)"
+        if let noti = eventiRicordati[chiave] { return noti }
+        let calcolati = calcolaEventi(da: da, a: fine)
+        if eventiRicordati.count > 40 { eventiRicordati = [:] }
+        eventiRicordati[chiave] = calcolati
+        return calcolati
+    }
+
+    private static func calcolaEventi(da: String, a fine: String) -> [J] {
         let visibiliIcs = Set(iscrizioni.filter { $0.enabled.vero && !$0.hidden.vero }.map(\.id.t))
         let visibili = Set(calendariPropri.filter { !$0.hidden.vero }.map(\.id.t))
         var out = a.ics.filter { $0.start_at.t < fine && $0.end_at.t > da && visibiliIcs.contains($0.subscription_id.t) }

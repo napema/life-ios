@@ -27,7 +27,20 @@ final class Archivio: ObservableObject {
     @Published private(set) var inCoda = 0
     @Published private(set) var ultimaSync: Date?
 
-    private var righe: [String: [String: J]] = [:]
+    private var righe: [String: [String: J]] {
+        get {
+            serratura.lock()
+            defer { serratura.unlock() }
+            return righeInterne
+        }
+        set {
+            serratura.lock()
+            righeInterne = newValue
+            serratura.unlock()
+        }
+    }
+    private let serratura = NSLock()
+    private var righeInterne: [String: [String: J]] = [:]
     private var eventiIcs: [J] = []
     private var coda: [String] = [] // "tabella|id"
     private var cursori: [String: String] = [:]
@@ -74,6 +87,7 @@ final class Archivio: ObservableObject {
 
     private func tocca() {
         versione &+= 1
+        Logica.s.datiCambiati()
         salvaPresto()
     }
 

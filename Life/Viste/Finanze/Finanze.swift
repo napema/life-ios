@@ -138,6 +138,7 @@ struct Blocco<Contenuto: View>: View {
 // MARK: - La schermata
 
 struct VistaFinanze: View {
+    private static var migrato = false
     init(scheda: String) { self.scheda = scheda }
 
     @ObservedObject private var logica = Logica.s
@@ -177,7 +178,10 @@ struct VistaFinanze: View {
             Button { fogli.apri(.pocket) } label: { Image(systemName: "wallet.pass") }
         }
         .onAppear {
-            fin("dati.migra")
+            if !Self.migrato {
+                Self.migrato = true
+                fin("dati.migra")
+            }
             if ciclo.isEmpty { ciclo = fin("calcolo.cicloDi").indice.t }
         }
     }
