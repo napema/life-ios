@@ -130,14 +130,11 @@ jobs:
           python3 - "$APP/logica.js" <<'PY'
           import re, sys
           t = open(sys.argv[1], encoding='utf-8').read()
-          riga, resto = t.split('
-', 1)
+          riga, resto = t.split('\n', 1)
           contratto = re.search(r'contratto=(\d+)', riga).group(1)
           resto = re.sub(r'Buon(giorno|asera|anotte| pomeriggio)', 'Prova aggiornata', resto)
-          open('/tmp/logica-buona.js', 'w', encoding='utf-8').write(f'// life-logica contratto={contratto} versione=9000000000000
-{resto}')
-          open('/tmp/logica-rotta.js', 'w', encoding='utf-8').write(f'// life-logica contratto={contratto} versione=9000000000001
-throw new Error("rotta");')
+          open('/tmp/logica-buona.js', 'w', encoding='utf-8').write(f'// life-logica contratto={contratto} versione=9000000000000\n{resto}')
+          open('/tmp/logica-rotta.js', 'w', encoding='utf-8').write(f'// life-logica contratto={contratto} versione=9000000000001\nthrow new Error("rotta");')
           PY
           mkdir -p screenshot
           xcrun simctl terminate "$SIM" it.life.app || true
