@@ -18,7 +18,15 @@ final class Logica: ObservableObject {
         let tipo: String
     }
 
-    private let contesto: JSContext
+    private(set) var contesto = JSContext()!
+    /// Ogni contesto ha il suo numero: quello sostituito da un aggiornamento non scrive più nulla.
+    private var generazione = 0
+    private var ultimaGenerazione = 0
+    private var avviata = false
+    /// Quando è stata costruita la logica in uso e se arriva da un aggiornamento.
+    private(set) var versioneLogica: Int64 = 0
+    private(set) var logicaScaricata = false
+    var ultimoControllo: Date?
     private var timer: [Int: Timer] = [:]
     private var prossimoTimer = 1
     private var memoria: [String: String] = [:]
@@ -32,19 +40,92 @@ final class Logica: ObservableObject {
     }()
 
     init() {
-        contesto = JSContext()
-        contesto.exceptionHandler = { _, e in
-            print("[js] \(e?.toString() ?? "?")")
-        }
         if let d = try? Data(contentsOf: fileMemoria), let m = try? JSONDecoder().decode([String: String].self, from: d) {
             memoria = m
         }
-        installaNativo()
-        guard let url = Bundle.main.url(forResource: "logica", withExtension: "js"), let codice = try? String(contentsOf: url, encoding: .utf8) else {
+        caricaAllAvvio()
+    }
+
+    // MARK: Il codice in uso
+
+    private func caricaAllAvvio() {
+        let delBundle = AggiornaLogica.codiceDelBundle()
+        let versioneBundle = delBundle.flatMap(AggiornaLogica.testata)?.versione ?? 0
+        if let scaricato = AggiornaLogica.codiceScaricato(), let t = AggiornaLogica.testata(scaricato),
+           t.contratto == Logica.contratto, t.versione > versioneBundle, t.versione != AggiornaLogica.scartata {
+            AggiornaLogica.inizioProva(t.versione)
+            let nuovo = creaContesto(scaricato)
+            AggiornaLogica.fineProva()
+            if nuovo.funziona {
+                contesto = nuovo.contesto
+                versioneLogica = t.versione
+                logicaScaricata = true
+                return
+            }
+            AggiornaLogica.scarta(t.versione)
+            AggiornaLogica.togliScaricato()
+        } else {
+            AggiornaLogica.togliScaricato()
+        }
+        guard let delBundle else {
             print("[logica] bundle mancante")
             return
         }
-        contesto.evaluateScript(codice)
+        contesto = creaContesto(delBundle).contesto
+        versioneLogica = versioneBundle
+    }
+
+    /// Un contesto nuovo col codice dato, e la prova che risponda davvero.
+    private func creaContesto(_ codice: String) -> (contesto: JSContext, funziona: Bool) {
+        let c = JSContext()!
+        var errore = false
+        c.exceptionHandler = { _, e in
+            errore = true
+            print("[js] \(e?.toString() ?? "?")")
+        }
+        ultimaGenerazione += 1
+        generazione = ultimaGenerazione
+        installaNativo(in: c)
+        c.evaluateScript(codice)
+        let risposta = c.objectForKeyedSubscript("__chiama")?.call(withArguments: ["home.saluto", "[9]"])?.toString() ?? ""
+        let funziona = !errore && !(J.parse(risposta).ok.str ?? "").isEmpty
+        c.exceptionHandler = { _, e in print("[js] \(e?.toString() ?? "?")") }
+        return (c, funziona)
+    }
+
+    /// Prova il codice appena scaricato e, se risponde, lo mette al posto di quello in uso.
+    /// Come ricaricare il sito: i dati stanno in memoria e la sincronizzazione riparte dal suo giro.
+    func sostituisci(codice: String, versione: Int64, scaricata: Bool) -> Bool {
+        let vecchiaGenerazione = generazione
+        let vecchiTimer = timer
+        timer = [:]
+        let nuovo = creaContesto(codice)
+        guard nuovo.funziona else {
+            timer.values.forEach { $0.invalidate() }
+            timer = vecchiTimer
+            generazione = vecchiaGenerazione
+            return false
+        }
+        vecchiTimer.values.forEach { $0.invalidate() }
+        contesto = nuovo.contesto
+        versioneLogica = versione
+        logicaScaricata = scaricata
+        if avviata {
+            contesto.objectForKeyedSubscript("__avvia")?.call(withArguments: [])
+            visibile(true)
+        }
+        segnalaCambio()
+        return true
+    }
+
+    private func segnalaCambio() { versione &+= 1 }
+
+    /// Dalle Impostazioni: lascia l'aggiornamento e torna alla logica compresa nell'app.
+    func usaLogicaDelBundle() {
+        guard let codice = AggiornaLogica.codiceDelBundle(), let t = AggiornaLogica.testata(codice) else { return }
+        AggiornaLogica.scarta(versioneLogica)
+        AggiornaLogica.togliScaricato()
+        _ = sostituisci(codice: codice, versione: t.versione, scaricata: false)
     }
 
     // MARK: Chiamate
@@ -73,7 +154,10 @@ final class Logica: ObservableObject {
         }
     }
 
-    func avvia() { contesto.objectForKeyedSubscript("__avvia")?.call(withArguments: []) }
+    func avvia() {
+        avviata = true
+        contesto.objectForKeyedSubscript("__avvia")?.call(withArguments: [])
+    }
     func sincronizza() { contesto.objectForKeyedSubscript("__sincronizza")?.call(withArguments: []) }
     func battito() { contesto.objectForKeyedSubscript("__battito")?.call(withArguments: []) }
     func eventiCambiati() { contesto.objectForKeyedSubscript("__eventiCambiati")?.call(withArguments: []) }
@@ -105,20 +189,23 @@ final class Logica: ObservableObject {
 
     // MARK: Il ponte
 
-    private func installaNativo() {
+    private func installaNativo(in contesto: JSContext) {
         let n = JSValue(newObjectIn: contesto)!
+        let mia = generazione
 
         let leggi: @convention(block) (String) -> Any = { [weak self] k in
             if let v = self?.memoria[k] { return v }
             return NSNull()
         }
         let scrivi: @convention(block) (String, String) -> Void = { [weak self] k, v in
-            self?.memoria[k] = v
-            self?.salvaMemoriaPresto()
+            guard let self, self.generazione == mia else { return }
+            self.memoria[k] = v
+            self.salvaMemoriaPresto()
         }
         let togli: @convention(block) (String) -> Void = { [weak self] k in
-            self?.memoria[k] = nil
-            self?.salvaMemoriaPresto()
+            guard let self, self.generazione == mia else { return }
+            self.memoria[k] = nil
+            self.salvaMemoriaPresto()
         }
         let chiavi: @convention(block) () -> String = { [weak self] in
             J.arr((self?.memoria.keys.sorted() ?? []).map { .str($0) }).testoJSON
@@ -136,17 +223,21 @@ final class Logica: ObservableObject {
             return (["id": .str(s.userId), "email": J.opz(s.email)] as J).testoJSON
         }
         let configurazione: @convention(block) (String) -> String = { $0 == "url" ? Config.supabaseUrl : Config.supabaseKey }
-        let datiCambiati: @convention(block) () -> Void = { [weak self] in self?.segnala() }
+        let datiCambiati: @convention(block) () -> Void = { [weak self] in
+            if self?.generazione == mia { self?.segnala() }
+        }
         let tabella: @convention(block) (String) -> String = { J.arr(Archivio.s.tutte($0)).testoJSON }
-        let scriviRighe: @convention(block) (String, String) -> Void = { nome, json in
+        let scriviRighe: @convention(block) (String, String) -> Void = { [weak self] nome, json in
+            guard self?.generazione == mia else { return }
             let righe = J.parse(json).list
             DispatchQueue.main.async { Archivio.s.scrivi(nome, righe) }
         }
         let nuovoTimer: @convention(block) (Double, Bool, JSValue) -> Int = { [weak self] ms, ripeti, fn in
-            guard let self else { return 0 }
+            guard let self, self.generazione == mia else { return 0 }
             let id = self.prossimoTimer
             self.prossimoTimer += 1
             let t = Timer(timeInterval: max(0.001, ms / 1000), repeats: ripeti) { [weak self] _ in
+                guard self?.generazione == mia else { return }
                 if !ripeti { self?.timer[id] = nil }
                 fn.call(withArguments: [])
             }

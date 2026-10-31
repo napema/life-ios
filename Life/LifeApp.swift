@@ -35,6 +35,7 @@ struct LifeApp: App {
                 Archivio.s.segnaEventiSporchi()
                 Archivio.s.avvia()
                 Notifiche.s.aggiornaPermesso()
+                Task { await AggiornaLogica.controlla() }
             case .background:
                 Logica.s.visibile(false)
                 Archivio.s.ferma()
@@ -133,7 +134,11 @@ struct Radice: View {
         }
         .onAppear(perform: applicaDemo)
         // Ogni minuto il giorno può cambiare; i moduli lo sanno da qui
-        .onReceive(Timer.publish(every: 60, on: .main, in: .common).autoconnect()) { _ in Logica.s.battito() }
+        .onReceive(Timer.publish(every: 60, on: .main, in: .common).autoconnect()) { _ in
+            Logica.s.battito()
+            Task { await AggiornaLogica.controlla() }
+        }
+        .task { await AggiornaLogica.controlla() }
     }
 
     private func applicaDemo() {

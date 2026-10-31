@@ -184,6 +184,14 @@ struct VistaImpostazioni: View {
                     Spacer()
                     Text(versione).foregroundStyle(Color.secondarioLife)
                 }
+                HStack {
+                    Text("Logica")
+                    Spacer()
+                    Text(versioneLogica).foregroundStyle(Color.secondarioLife)
+                }
+                if Logica.s.logicaScaricata {
+                    Button("Torna alla logica dell'app") { Logica.s.usaLogicaDelBundle() }
+                }
                 if let e = rete.sessione?.email {
                     HStack {
                         Text("Account")
@@ -200,6 +208,12 @@ struct VistaImpostazioni: View {
                 Azioni.aggiorna(progetto: a.task.id.t, ["emoji": .str(e)])
             }
         }
+    }
+
+    private var versioneLogica: String {
+        let data = Date(timeIntervalSince1970: Double(Logica.s.versioneLogica) / 1000)
+        let testo = data.formatted(.dateTime.day().month().hour().minute().locale(Locale(identifier: "it_IT")))
+        return Logica.s.logicaScaricata ? "\(testo), aggiornata" : testo
     }
 
     private var versione: String {

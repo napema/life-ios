@@ -3,6 +3,11 @@ name: Compila Life
 on:
   push:
     branches: [main]
+    # La sola logica arriva ai telefoni da sé: non serve un'IPA nuova
+    paths-ignore:
+      - Life/Risorse/logica.js
+      - logica/**
+      - README.md
   workflow_dispatch:
 
 permissions:
@@ -45,43 +50,6 @@ jobs:
           zip -qry Life.ipa Payload
           ls -lh Life.ipa
 
-      - name: Screenshot dal simulatore
-        continue-on-error: true
-        run: |
-          set -x
-          xcodebuild -project Life.xcodeproj -scheme Life -configuration Debug -sdk iphonesimulator \
-            -destination 'generic/platform=iOS Simulator' -derivedDataPath build-sim \
-            CODE_SIGNING_ALLOWED=NO build > build-sim.log 2>&1
-          SIM=$(xcrun simctl list devices available -j | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; print(next(x['udid'] for k in sorted(d, reverse=True) for x in d[k] if 'iPhone' in x['name'] and 'Pro' in x['name']))")
-          xcrun simctl boot "$SIM"
-          xcrun simctl bootstatus "$SIM" -b
-          xcrun simctl install "$SIM" build-sim/Build/Products/Debug-iphonesimulator/Life.app
-          mkdir -p screenshot
-          for vista in login home oggi calendario programmate liste finanze abitudini training mobilita pasti impostazioni; do
-            xcrun simctl terminate "$SIM" it.life.app || true
-            SIMCTL_CHILD_LIFE_DEMO=$vista xcrun simctl launch "$SIM" it.life.app
-            sleep 7
-            xcrun simctl io "$SIM" screenshot "screenshot/$vista.png"
-          done
-          # Avvio vero, senza dati finti: deve arrivare all'accesso e restare aperta
-          xcrun simctl terminate "$SIM" it.life.app || true
-          xcrun simctl launch "$SIM" it.life.app
-          sleep 10
-          xcrun simctl spawn "$SIM" launchctl list | grep -q "it.life.app"
-          xcrun simctl io "$SIM" screenshot "screenshot/avvio-vero.png"
-
-      - name: Conserva i risultati
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: risultati
-          path: |
-            Life.ipa
-            build.log
-            build-sim.log
-            screenshot/
-          if-no-files-found: warn
-
       - name: Pubblica per SideStore
         if: github.ref == 'refs/heads/main'
         env:
@@ -120,5 +88,97 @@ jobs:
             }]
           }
           EOF
-          gh release delete ultima --yes --cleanup-tag || true
-          gh release create ultima Life.ipa sorgente.json --title "Life (build $NUMERO)" --notes "Compilata da GitHub: scaricala con SideStore."
+          if gh release view ultima > /dev/null 2>&1; then
+            gh release upload ultima Life.ipa sorgente.json --clobber
+            gh release edit ultima --title "Life (build $NUMERO)"
+          else
+            gh release create ultima Life.ipa sorgente.json --title "Life (build $NUMERO)" --notes "Compilata da GitHub."
+          fi
+
+      - name: Screenshot dal simulatore
+        continue-on-error: true
+        run: |
+          set -x
+          xcodebuild -project Life.xcodeproj -scheme Life -configuration Debug -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' -derivedDataPath build-sim \
+            CODE_SIGNING_ALLOWED=NO build > build-sim.log 2>&1
+          SIM=$(xcrun simctl list devices available -j | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; print(next(x['udid'] for k in sorted(d, reverse=True) for x in d[k] if 'iPhone' in x['name'] and 'Pro' in x['name']))")
+          xcrun simctl boot "$SIM"
+          xcrun simctl bootstatus "$SIM" -b
+          xcrun simctl install "$SIM" build-sim/Build/Products/Debug-iphonesimulator/Life.app
+          mkdir -p screenshot
+          for vista in login home oggi calendario programmate liste finanze abitudini training mobilita pasti impostazioni; do
+            xcrun simctl terminate "$SIM" it.life.app || true
+            SIMCTL_CHILD_LIFE_DEMO=$vista xcrun simctl launch "$SIM" it.life.app
+            sleep 7
+            xcrun simctl io "$SIM" screenshot "screenshot/$vista.png"
+          done
+          # Avvio vero, senza dati finti: deve arrivare all'accesso e restare aperta
+          xcrun simctl terminate "$SIM" it.life.app || true
+          xcrun simctl launch "$SIM" it.life.app
+          sleep 10
+          xcrun simctl spawn "$SIM" launchctl list | grep -q "it.life.app"
+          xcrun simctl io "$SIM" screenshot "screenshot/avvio-vero.png"
+
+      - name: Prova l'aggiornamento della logica
+        continue-on-error: true
+        run: |
+          set -x
+          SIM=$(xcrun simctl list devices booted -j | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; print(next(x['udid'] for k in d for x in d[k]))")
+          APP=build-sim/Build/Products/Debug-iphonesimulator/Life.app
+          # 1. Una logica nuova che saluta in modo riconoscibile: deve entrare ad app aperta e restare al riavvio
+          python3 - "$APP/logica.js" <<'PY'
+          import re, sys
+          t = open(sys.argv[1], encoding='utf-8').read()
+          riga, resto = t.split('
+', 1)
+          contratto = re.search(r'contratto=(\d+)', riga).group(1)
+          resto = re.sub(r'Buon(giorno|asera|anotte| pomeriggio)', 'Prova aggiornata', resto)
+          open('/tmp/logica-buona.js', 'w', encoding='utf-8').write(f'// life-logica contratto={contratto} versione=9000000000000
+{resto}')
+          open('/tmp/logica-rotta.js', 'w', encoding='utf-8').write(f'// life-logica contratto={contratto} versione=9000000000001
+throw new Error("rotta");')
+          PY
+          mkdir -p screenshot
+          xcrun simctl terminate "$SIM" it.life.app || true
+          SIMCTL_CHILD_LIFE_DEMO=home SIMCTL_CHILD_LIFE_LOGICA_URL=file:///tmp/logica-buona.js xcrun simctl launch "$SIM" it.life.app
+          sleep 8
+          xcrun simctl io "$SIM" screenshot screenshot/agg-1-appena-arrivata.png
+          xcrun simctl terminate "$SIM" it.life.app || true
+          SIMCTL_CHILD_LIFE_DEMO=home xcrun simctl launch "$SIM" it.life.app
+          sleep 8
+          xcrun simctl io "$SIM" screenshot screenshot/agg-2-dopo-riavvio.png
+          # 2. Una logica rotta: va scartata, l'app resta aperta con quella buona
+          xcrun simctl terminate "$SIM" it.life.app || true
+          SIMCTL_CHILD_LIFE_DEMO=home SIMCTL_CHILD_LIFE_LOGICA_URL=file:///tmp/logica-rotta.js xcrun simctl launch "$SIM" it.life.app
+          sleep 8
+          xcrun simctl io "$SIM" screenshot screenshot/agg-3-logica-rotta.png
+          xcrun simctl spawn "$SIM" launchctl list | grep -q "it.life.app"
+          DATI=$(xcrun simctl get_app_container "$SIM" it.life.app data)
+          head -c 70 "$DATI/Library/Application Support/logica-scaricata.js" || true
+          # 3. Gli indirizzi veri: con la logica dell'app resa vecchia, deve scaricare quella di GitHub
+          xcrun simctl terminate "$SIM" it.life.app || true
+          xcrun simctl uninstall "$SIM" it.life.app
+          python3 - "$APP/logica.js" <<'PY'
+          import re, sys
+          t = open(sys.argv[1], encoding='utf-8').read()
+          open(sys.argv[1], 'w', encoding='utf-8').write(re.sub(r'versione=\d+', 'versione=1', t, count=1))
+          PY
+          xcrun simctl install "$SIM" "$APP"
+          SIMCTL_CHILD_LIFE_DEMO=home SIMCTL_CHILD_LIFE_LOGICA_URL=reale xcrun simctl launch "$SIM" it.life.app
+          sleep 15
+          xcrun simctl io "$SIM" screenshot screenshot/agg-4-da-github.png
+          DATI=$(xcrun simctl get_app_container "$SIM" it.life.app data)
+          echo "ESITO GITHUB: $(head -c 70 "$DATI/Library/Application Support/logica-scaricata.js")"
+
+      - name: Conserva i risultati
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: risultati
+          path: |
+            Life.ipa
+            build.log
+            build-sim.log
+            screenshot/
+          if-no-files-found: warn

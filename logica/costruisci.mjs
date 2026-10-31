@@ -39,7 +39,12 @@ const sostituzioni = {
   },
 };
 
+// La prima riga di logica.js: l'app la legge per sapere se un aggiornamento fa per lei
+const contratto = readFileSync(path.join(qui, '../Life/Core/AggiornaLogica.swift'), 'utf8').match(/static let contratto = (\d+)/)?.[1];
+if (!contratto) throw new Error('Manca il contratto in AggiornaLogica.swift');
+
 await build({
+  banner: { js: `// life-logica contratto=${contratto} versione=${Date.now()}` },
   entryPoints: [path.join(qui, 'entry.js')],
   bundle: true,
   format: 'iife',

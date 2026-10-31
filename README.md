@@ -30,9 +30,17 @@ restano su Supabase.
 
 ## Aggiornamenti
 
-Ogni modifica pubblicata su `main` viene compilata da GitHub e pubblicata nella release `ultima`.
-In SideStore compare **Update** se hai aggiunto la sorgente; altrimenti riscarichi l'IPA e lo riapri
-con SideStore, che lo installa sopra quello che c'è.
+**Logica (calcoli, regole, testi e dati preparati dalla logica):** rilancia `node ios/logica/costruisci.mjs`
+e pubblica `logica.js` su `main`. L'app lo scarica da sola all'apertura e ogni minuto mentre è aperta,
+senza reinstallare. Se il codice nuovo non parte, resta quello di prima. In **Impostazioni → Logica** vedi
+quale versione è in uso.
+
+**Schermate in Swift:** GitHub compila e pubblica l'IPA nella release `ultima` in circa 3 minuti. In SideStore
+compare **Update** se hai aggiunto la sorgente; altrimenti riscarichi l'IPA e rifai **Import IPA** con iloader.
+
+Se Swift e logica smettono di capirsi (una funzione nativa nuova, un dato letto in modo diverso), alza
+`Logica.contratto` in `AggiornaLogica.swift`: i telefoni con l'app vecchia ignorano la logica nuova finché
+non installano l'IPA nuova.
 
 ## Notifiche
 
