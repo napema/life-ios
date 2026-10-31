@@ -8,9 +8,9 @@ la logica di Finanze, Abitudini, Training, Mobilità e Pasti è quella del sito,
 
 Serve il PC con Windows e il cavo dell'iPhone solo per questa prima volta.
 
-1. Su iPhone: **Impostazioni → Privacy e sicurezza → Modalità sviluppatore**, accendila e riavvia.
-2. Installa **LocalDevVPN** dall'App Store.
-3. Sul PC installa **iTunes** ([dal Microsoft Store](https://apple.co/ms), serve a Windows per vedere l'iPhone) e **iloader** ([download per Windows](https://github.com/nab138/iloader/releases/latest/download/iloader-windows-x64.exe)). Collega l'iPhone col cavo, tocca **Autorizza** sul telefono, apri iloader, accedi con l'Apple ID, scegli il telefono e poi **Install SideStore**.
+1. Installa **LocalDevVPN** dall'App Store.
+2. Sul PC installa **iTunes** ([dal Microsoft Store](https://apple.co/ms), serve a Windows per vedere l'iPhone) e **iloader** ([download per Windows](https://github.com/nab138/iloader/releases/latest/download/iloader-windows-x64.exe)). Collega l'iPhone col cavo, tocca **Autorizza** sul telefono, apri iloader, accedi con l'Apple ID, scegli il telefono e poi **Install SideStore**.
+3. Su iPhone: **Impostazioni → Privacy e sicurezza → Modalità sviluppatore**, accendila e riavvia. La voce compare solo dopo che SideStore è stato installato; se manca, apri SideStore una volta e ricontrolla.
 4. Su iPhone: **Impostazioni → Generali → VPN e gestione dispositivo**, tocca il tuo account e autorizzalo.
 5. Accendi **LocalDevVPN**, apri **SideStore** e accedi con lo stesso Apple ID.
 6. In SideStore, scheda **My Apps**, tocca il contatore **7 DAYS** per il primo rinnovo.
