@@ -1052,7 +1052,7 @@ struct FoglioMovimento: View {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 6) {
                         ForEach(Array(fin("dati.TIPI").dict.keys).sorted { ordineTipo($0) < ordineTipo($1) }, id: \.self) { k in
-                            Pillola(testo: etichettaTipo(k), attiva: tipo == k, colore: accentoFinanze) { cambiaTipo(k) }
+                            Pillola(testo: etichettaTipo(k), attiva: tipo == k, colore: k == "out" ? .pericoloLife : k == "in" ? .successoLife : accentoFinanze) { cambiaTipo(k) }
                         }
                     }
                 }
