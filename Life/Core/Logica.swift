@@ -108,7 +108,10 @@ final class Logica: ObservableObject {
     private func installaNativo() {
         let n = JSValue(newObjectIn: contesto)!
 
-        let leggi: @convention(block) (String) -> Any = { [weak self] k in self?.memoria[k] ?? NSNull() }
+        let leggi: @convention(block) (String) -> Any = { [weak self] k in
+            if let v = self?.memoria[k] { return v }
+            return NSNull()
+        }
         let scrivi: @convention(block) (String, String) -> Void = { [weak self] k, v in
             self?.memoria[k] = v
             self?.salvaMemoriaPresto()
