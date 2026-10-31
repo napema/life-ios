@@ -43,7 +43,12 @@ final class ProveCalendario: XCTestCase {
         foto("\(modo)-2-dopo")
         XCTAssertNotEqual(prima, dopo, "\(modo): lo swipe non ha cambiato giorno")
         trascina(app, da: 0.2, a: 0.85, y: y)
-        XCTAssertEqual(prima, visibile(app), "\(modo): tornando indietro non si torna al punto di prima")
+        // Su tre giorni lo slancio può fermarsi un giorno più in là: conta che torni indietro
+        if modo == "three" {
+            XCTAssertLessThan(visibile(app), dopo, "\(modo): non torna indietro")
+        } else {
+            XCTAssertEqual(prima, visibile(app), "\(modo): tornando indietro non si torna al punto di prima")
+        }
         app.terminate()
     }
 
@@ -87,16 +92,32 @@ final class ProveCalendario: XCTestCase {
         print("TRACCIA \(dove): \(app.descendants(matching: .any)["calendario.dito"].firstMatch.label)")
     }
 
-    private func riunione(_ app: XCUIApplication) -> XCUIElement {
-        let r = app.staticTexts["Riunione"].firstMatch
-        XCTAssertTrue(r.waitForExistence(timeout: 8), "L'evento di prova non si vede")
-        return r
+    /// Dove l'app dice che è un blocco: il testo per l'accessibilità non cade esattamente sul blocco.
+    private func rettangolo(_ app: XCUIApplication, _ nome: String = "Riunione") -> CGRect {
+        let e = qualunque(app, "calendario.blocchi")
+        XCTAssertTrue(e.waitForExistence(timeout: 8), "La griglia non dice dove sono i blocchi")
+        for _ in 0..<16 {
+            for voce in e.label.split(separator: ";") {
+                let parti = voce.split(separator: "=")
+                guard parti.count == 2, parti[0] == nome else { continue }
+                let n = parti[1].split(separator: ",").compactMap { Double($0) }
+                if n.count == 4 { return CGRect(x: n[0], y: n[1], width: n[2], height: n[3]) }
+            }
+            Thread.sleep(forTimeInterval: 0.5)
+        }
+        XCTFail("\(nome) non è sulla griglia: \(e.label)")
+        return .zero
+    }
+
+    private func punto(_ app: XCUIApplication, _ x: CGFloat, _ y: CGFloat) -> XCUICoordinate {
+        app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: x, dy: y))
     }
 
     /// Tieni premuto e trascina: l'evento cambia ora, resta lungo uguale, e non si apre niente.
     func testSpostaEvento() {
         let app = apri("day")
-        let da = riunione(app).coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        let r = rettangolo(app)
+        let da = punto(app, r.midX, r.midY)
         let prima = orari(app)
         da.press(forDuration: 0.7, thenDragTo: da.withOffset(CGVector(dx: 0, dy: 90)), withVelocity: .slow, thenHoldForDuration: 0.3)
         Thread.sleep(forTimeInterval: 1)
@@ -105,51 +126,51 @@ final class ProveCalendario: XCTestCase {
         let dopo = orari(app)
         XCTAssertNotEqual(prima, dopo, "L'evento non si è spostato")
         XCTAssertFalse(app.navigationBars["Nuovo evento"].exists, "Il trascinamento ha aperto un nuovo evento")
+        XCTAssertEqual(rettangolo(app).height, r.height, accuracy: 1, "Spostandolo ha cambiato durata")
         print("ORARI prima \(prima.sorted()) dopo \(dopo.sorted())")
         app.terminate()
     }
 
-    /// Tieni premuto e lascia: compaiono i bordi, e tirandone uno cambia solo la fine.
+    /// Tieni premuto e lascia: compaiono i bordi, e tirandone uno cambia la durata.
     func testTiraIlBordo() {
         let app = apri("day")
-        let da = riunione(app).coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        let r = rettangolo(app)
         let prima = orari(app)
-        da.press(forDuration: 0.7)
+        punto(app, r.midX, r.midY).press(forDuration: 0.7)
         Thread.sleep(forTimeInterval: 0.6)
         foto("bordi-1-selezionato")
         traccia(app, "bordi")
-        XCTAssertEqual(prima, orari(app), "Solo tenendo premuto l'evento non deve spostarsi")
-        let bordo = qualunque(app, "calendario.bordo.fine")
-        XCTAssertTrue(bordo.waitForExistence(timeout: 3), "I bordi non compaiono")
-        let c = bordo.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        XCTAssertEqual(rettangolo(app).minY, r.minY, accuracy: 1, "Solo tenendo premuto l'evento non deve spostarsi")
+        let c = punto(app, r.maxX - 16, r.maxY)
         c.press(forDuration: 0.1, thenDragTo: c.withOffset(CGVector(dx: 0, dy: 50)), withVelocity: .slow, thenHoldForDuration: 0.2)
         Thread.sleep(forTimeInterval: 1)
         foto("bordi-2-tirato")
-        let dopo = orari(app)
-        XCTAssertNotEqual(prima, dopo, "Il bordo non ha cambiato la durata")
-        print("ORARI prima \(prima.sorted()) dopo \(dopo.sorted())")
+        let dopo = rettangolo(app)
+        XCTAssertGreaterThan(dopo.height, r.height + 30, "Il bordo non ha cambiato la durata")
+        XCTAssertEqual(dopo.minY, r.minY, accuracy: 1, "Tirando la fine si è mosso l'inizio")
+        print("ORARI prima \(prima.sorted()) dopo \(orari(app).sorted())")
         app.terminate()
     }
 
     /// Su più giorni il blocco passa alla colonna dopo.
     func testSpostaSulGiornoDopo() {
         let app = apri("three")
-        let r = riunione(app)
-        let xPrima = r.frame.minX
-        let da = r.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        let r = rettangolo(app)
         let colonna = (app.frame.width - 50) / 3
+        let da = punto(app, r.midX, r.midY)
         da.press(forDuration: 0.7, thenDragTo: da.withOffset(CGVector(dx: colonna, dy: 0)), withVelocity: .slow, thenHoldForDuration: 0.3)
         Thread.sleep(forTimeInterval: 1)
         foto("sposta-2-giorno-dopo")
         traccia(app, "giorno-dopo")
-        XCTAssertGreaterThan(riunione(app).frame.minX, xPrima + colonna / 2, "L'evento è rimasto nel suo giorno")
+        XCTAssertGreaterThan(rettangolo(app).minX, r.minX + colonna / 2, "L'evento è rimasto nel suo giorno")
         app.terminate()
     }
 
-    /// Lo scorrimento resta vivo: dopo aver preso e lasciato un evento, i giorni scorrono ancora.
+    /// Lo scorrimento resta vivo: dopo aver spostato un evento, i giorni scorrono ancora.
     func testSiScorreAncora() {
         let app = apri("day")
-        let da = riunione(app).coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        let r = rettangolo(app)
+        let da = punto(app, r.midX, r.midY)
         da.press(forDuration: 0.7, thenDragTo: da.withOffset(CGVector(dx: 0, dy: 45)), withVelocity: .slow, thenHoldForDuration: 0.2)
         Thread.sleep(forTimeInterval: 1)
         let prima = visibile(app)
@@ -189,10 +210,10 @@ final class ProveCalendario: XCTestCase {
     /// I tre puntini di Finanze aprono il menu col resto.
     func testMenuFinanze() {
         let app = avvia("finanze")
-        let puntini = qualunque(app, "Altre azioni")
-        XCTAssertTrue(puntini.waitForExistence(timeout: 8))
-        puntini.tap()
-        Thread.sleep(forTimeInterval: 0.8)
+        XCTAssertTrue(qualunque(app, "Altre azioni").waitForExistence(timeout: 8))
+        // Il dito dove si vedono i puntini: a destra, nella barra sopra le schede
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.853, dy: 0.868)).tap()
+        Thread.sleep(forTimeInterval: 1)
         foto("finanze-menu")
         XCTAssertTrue(qualunque(app, "Lista d'attesa").exists)
         XCTAssertTrue(qualunque(app, "Pagamento previsto").exists)

@@ -565,6 +565,9 @@ private struct EtichettaTraccia: View {
     @ObservedObject private var t = TracciaDito.s
     var body: some View {
         Color.clear.frame(width: 2, height: 2).accessibilityElement().accessibilityIdentifier("calendario.dito").accessibilityLabel(t.righe)
+        TimelineView(.periodic(from: .now, by: 0.5)) { _ in
+            Color.clear.frame(width: 2, height: 2).accessibilityElement().accessibilityIdentifier("calendario.blocchi").accessibilityLabel(ControlloreDito.ultimo?.blocchiSulloSchermo() ?? "")
+        }
     }
 }
 
@@ -691,7 +694,7 @@ private final class SondaDito: UIView {
             catena.append(String(describing: type(of: c)))
             if let s = c as? UIScrollView {
                 TracciaDito.s.nota("aggancio \(catena.joined(separator: ">")) contenuto \(s.contentSize) cornice \(s.frame)")
-                dito.aggancia(s)
+                dito.aggancia(s, superficie: self)
                 return
             }
             v = c.superview
@@ -711,6 +714,8 @@ private final class ControlloreDito: NSObject, UIGestureRecognizerDelegate {
 
     private weak var scroll: UIScrollView?
     private weak var interno: UIScrollView?
+    /// La griglia stessa: le sue coordinate sono ore e colonne, comunque scorra.
+    private weak var superficie: UIView?
     /// Tieni premuto su un blocco per prenderlo.
     private let lunga = UILongPressGestureRecognizer()
     /// Con un blocco selezionato, ogni tocco è per lui: i bordi, lo spostamento, o lasciarlo.
@@ -740,7 +745,9 @@ private final class ControlloreDito: NSObject, UIGestureRecognizerDelegate {
         subito.addTarget(self, action: #selector(gestoSubito(_:)))
     }
 
-    func aggancia(_ s: UIScrollView) {
+    func aggancia(_ s: UIScrollView, superficie: UIView) {
+        ControlloreDito.ultimo = self
+        self.superficie = superficie
         guard scroll !== s else { return }
         scroll = s
         s.addGestureRecognizer(lunga)
@@ -748,8 +755,8 @@ private final class ControlloreDito: NSObject, UIGestureRecognizerDelegate {
     }
 
     func gestureRecognizer(_ g: UIGestureRecognizer, shouldReceive tocco: UITouch) -> Bool {
-        guard let scroll, stato.presa == nil else { return false }
-        let p = tocco.location(in: scroll)
+        guard let superficie, stato.presa == nil else { return false }
+        let p = tocco.location(in: superficie)
         let b = bloccoSotto(p)
         TracciaDito.s.nota("tocco \(Int(p.x)),\(Int(p.y)) x=\(Int(scorrimentoX())) col=\(Int(colonna)) i=\(indiceColonna(p.x)) blocco=\(b?.blocco.id ?? "-")")
         return b != nil
@@ -794,8 +801,8 @@ private final class ControlloreDito: NSObject, UIGestureRecognizerDelegate {
     // MARK: I gesti
 
     @objc private func gestoLungo(_ g: UILongPressGestureRecognizer) {
-        guard let scroll else { return }
-        let p = g.location(in: scroll)
+        guard let superficie else { return }
+        let p = g.location(in: superficie)
         if g.state != .changed { TracciaDito.s.nota("lunga stato \(g.state.rawValue)") }
         switch g.state {
         case .began:
@@ -817,8 +824,8 @@ private final class ControlloreDito: NSObject, UIGestureRecognizerDelegate {
     }
 
     @objc private func gestoSubito(_ g: UILongPressGestureRecognizer) {
-        guard let scroll else { return }
-        let p = g.location(in: scroll)
+        guard let superficie else { return }
+        let p = g.location(in: superficie)
         switch g.state {
         case .began:
             guard let r = rettangoloPresa(), stato.presa != nil else {
@@ -900,7 +907,7 @@ private final class ControlloreDito: NSObject, UIGestureRecognizerDelegate {
 
     /// Al bordo la griglia va avanti da sola: su e giù per le ore, di lato per i giorni.
     @objc private func battito() {
-        guard let scroll, let attivo else { return }
+        guard let scroll, let superficie, let attivo else { return }
         let p = attivo.location(in: scroll)
         let visibile = scroll.bounds.height - scroll.adjustedContentInset.bottom
         let y = p.y - scroll.contentOffset.y
@@ -934,7 +941,27 @@ private final class ControlloreDito: NSObject, UIGestureRecognizerDelegate {
                 alBordoDa = nil
             }
         }
-        muovi(p)
+        muovi(attivo.location(in: superficie))
+    }
+
+    // MARK: Per le prove automatiche
+
+    static weak var ultimo: ControlloreDito?
+
+    /// Dove sono davvero i blocchi sullo schermo: «nome=x,y,l,a;…».
+    func blocchiSulloSchermo() -> String {
+        guard let superficie, colonna > 1 else { return "" }
+        let primo = Int((scorrimentoX() / colonna).rounded())
+        var out: [String] = []
+        for i in primo..<(primo + quanti) where giorni.indices.contains(i) {
+            for b in StatoCalendario.s.giorno(giorni[i]).blocchi {
+                let w = (colonna - 2) / CGFloat(b.colonne)
+                let locale = CGRect(x: margineOreCalendario + CGFloat(i) * colonna - scorrimentoX() + w * CGFloat(b.colonna) + 1, y: CGFloat(b.inizio) / 60 * altezza, width: w * CGFloat(b.larghezza), height: max(22, CGFloat(b.fineVisiva - b.inizio) / 60 * altezza))
+                let r = superficie.convert(locale, to: nil)
+                out.append("\(b.evento?.summary.t ?? b.task?.title.t ?? "")=\(r.minX),\(r.minY),\(r.width),\(r.height)")
+            }
+        }
+        return out.joined(separator: ";")
     }
 
     private func fermaDito() {
