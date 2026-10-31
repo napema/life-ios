@@ -192,38 +192,41 @@ final class ProveCalendario: XCTestCase {
         app.terminate()
     }
 
-    /// I tre puntini di Finanze aprono il menu col resto.
+    /// I tre puntini di Finanze aprono il menu ogni volta, e dal menu si arriva al foglio.
     func testMenuFinanze() {
         let app = avvia("finanze")
-        XCTAssertTrue(qualunque(app, "Altre azioni").waitForExistence(timeout: 8))
-        // Il dito dove si vedono i puntini: a destra, nella barra sopra le schede. Deve aprirsi ogni volta
-        Thread.sleep(forTimeInterval: 4)
+        let puntini = qualunque(app, "Altre azioni")
+        XCTAssertTrue(puntini.waitForExistence(timeout: 8))
+        foto("finanze-barra")
         var aperture = 0
         for i in 0..<5 {
-            app.coordinate(withNormalizedOffset: CGVector(dx: 0.853, dy: 0.868)).tap()
-            Thread.sleep(forTimeInterval: 1.2)
-            if qualunque(app, "Pagamento previsto").exists { aperture += 1 }
+            puntini.tap()
+            if qualunque(app, "Pagamento previsto").waitForExistence(timeout: 3) { aperture += 1 }
             foto("finanze-menu-\(i)")
-            app.coordinate(withNormalizedOffset: CGVector(dx: 0.2, dy: 0.25)).tap()
+            // Fuori dal menu, nella barra in alto: chiude e basta
+            app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.1)).tap()
             Thread.sleep(forTimeInterval: 1)
         }
         print("MENU aperto \(aperture)/5")
         XCTAssertEqual(aperture, 5, "I tre puntini non aprono il menu ogni volta")
-        // E dal menu si arriva al foglio; lo stesso per Uscita
-        app.coordinate(withNormalizedOffset: CGVector(dx: 0.853, dy: 0.868)).tap()
-        Thread.sleep(forTimeInterval: 1.2)
+        puntini.tap()
+        XCTAssertTrue(qualunque(app, "Pagamento previsto").waitForExistence(timeout: 3))
         qualunque(app, "Pagamento previsto").tap()
         Thread.sleep(forTimeInterval: 1.5)
         foto("finanze-foglio-previsto")
-        XCTAssertFalse(qualunque(app, "Altre azioni").isHittable, "Il foglio del pagamento non si è aperto")
+        XCTAssertFalse(puntini.isHittable, "Il foglio del pagamento non si è aperto")
         app.terminate()
-        let di_nuovo = avvia("finanze")
-        di_nuovo.coordinate(withNormalizedOffset: CGVector(dx: 0.2, dy: 0.868)).tap()
+    }
+
+    /// Uscita apre il suo foglio.
+    func testUscita() {
+        let app = avvia("finanze")
+        let uscita = qualunque(app, "Uscita")
+        XCTAssertTrue(uscita.waitForExistence(timeout: 8))
+        uscita.tap()
         Thread.sleep(forTimeInterval: 1.5)
         foto("finanze-foglio-uscita")
-        XCTAssertFalse(qualunque(di_nuovo, "Altre azioni").isHittable, "Uscita non apre il suo foglio")
-        di_nuovo.terminate()
-        return
+        XCTAssertFalse(qualunque(app, "Altre azioni").isHittable, "Uscita non apre il suo foglio")
         app.terminate()
     }
 }

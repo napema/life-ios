@@ -152,7 +152,6 @@ struct MiniApp: View {
             case "calendario": calendario
             case "finanze":
                 schedeApp
-                    .tabViewBottomAccessory { BarraGestiFinanze() }
                     .sheet(item: $fogli.aperto) { f in FoglioFinanzeVista(foglio: f) }
                     .onReceive(instradatore.$movimento) { tipo in
                         guard let tipo else { return }
@@ -204,7 +203,11 @@ struct MiniApp: View {
             case "liste": VistaListe()
             default: VistaOggi()
             }
-        case "finanze": VistaFinanze(scheda: s)
+        case "finanze":
+            VistaFinanze(scheda: s)
+                .safeAreaBar(edge: .bottom) {
+                    if s != "altro" { BarraGestiFinanze() }
+                }
         case "abitudini": VistaAbitudini(scheda: s)
         case "allenamenti": VistaTraining(scheda: s)
         case "mobilita": VistaMobilita(scheda: s)
@@ -232,45 +235,48 @@ struct MiniApp: View {
     }
 }
 
-/// I gesti di tutti i giorni di Finanze, sopra la barra.
+/// I gesti di tutti i giorni di Finanze, sopra la barra delle schede: uscita rossa, entrata verde,
+/// il resto dietro i tre puntini. Sta nella vista e non nell'accessorio della TabView, dove i tocchi
+/// sul menu andavano persi.
 struct BarraGestiFinanze: View {
     @ObservedObject private var fogli = Fogli.s
-    var body: some View {
-        HStack(spacing: 4) {
-            Button { fogli.apri(.movimento(nil, "out", nil)) } label: { Label("Uscita", systemImage: "minus").fontWeight(.semibold) }
-                .foregroundStyle(Color.pericoloLife)
-            Spacer(minLength: 6)
-            Button { fogli.apri(.movimento(nil, "in", nil)) } label: { Label("Entrata", systemImage: "plus").fontWeight(.semibold) }
-                .foregroundStyle(Color.successoLife)
-            Spacer(minLength: 6)
-            BottonePuntini().frame(width: 44, height: 36)
+
+    private func gesto(_ titolo: String, _ icona: String, _ colore: Color, _ tipo: String) -> some View {
+        Button {
+            tocco()
+            fogli.apri(.movimento(nil, tipo, nil))
+        } label: {
+            Label(titolo, systemImage: icona)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(colore)
+                .frame(maxWidth: .infinity, minHeight: 50)
+                .contentShape(Rectangle())
         }
-        .font(.subheadline)
         .buttonStyle(.plain)
+    }
+
+    var body: some View {
+        HStack(spacing: 0) {
+            gesto("Uscita", "minus", .pericoloLife, "out")
+            gesto("Entrata", "plus", .successoLife, "in")
+            Menu {
+                Button { fogli.apri(.previsto) } label: { Label("Pagamento previsto", systemImage: "calendar") }
+                Button { fogli.apri(.lista) } label: { Label("Lista d'attesa", systemImage: "clock") }
+                Button { fogli.apri(.movimento(nil, "giro", nil)) } label: { Label("Giroconto, rimborso, reso, ricarica", systemImage: "arrow.left.arrow.right") }
+            } label: {
+                Image(systemName: "ellipsis")
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(Color.primary)
+                    .frame(width: 56, height: 50)
+                    .contentShape(Rectangle())
+            }
+            .accessibilityLabel("Altre azioni")
+        }
+        .padding(.horizontal, 6)
+        .glassEffect(.regular.interactive(), in: .capsule)
         .padding(.horizontal, 16)
+        .padding(.bottom, 8)
     }
-}
-
-/// I tre puntini col resto dei gesti. Il Menu di SwiftUI dentro la barra sopra le schede non si apre
-/// sempre: il bottone di UIKit sì, e il menu nasce dal bottone allo stesso modo.
-private struct BottonePuntini: UIViewRepresentable {
-    func makeUIView(context: Context) -> UIButton {
-        var aspetto = UIButton.Configuration.plain()
-        aspetto.image = UIImage(systemName: "ellipsis", withConfiguration: UIImage.SymbolConfiguration(textStyle: .body, scale: .medium).applying(UIImage.SymbolConfiguration(weight: .semibold)))
-        aspetto.baseForegroundColor = .label
-        let b = UIButton(configuration: aspetto)
-        b.accessibilityLabel = "Altre azioni"
-        b.showsMenuAsPrimaryAction = true
-        b.preferredMenuElementOrder = .fixed
-        b.menu = UIMenu(children: [
-            UIAction(title: "Pagamento previsto", image: UIImage(systemName: "calendar")) { _ in Fogli.s.apri(.previsto) },
-            UIAction(title: "Lista d'attesa", image: UIImage(systemName: "clock")) { _ in Fogli.s.apri(.lista) },
-            UIAction(title: "Giroconto, rimborso, reso, ricarica", image: UIImage(systemName: "arrow.left.arrow.right")) { _ in Fogli.s.apri(.movimento(nil, "giro", nil)) },
-        ])
-        return b
-    }
-
-    func updateUIView(_ b: UIButton, context: Context) {}
 }
 
 /// «Annulla» e gli avvisi stanno sopra qualsiasi mini-app.
