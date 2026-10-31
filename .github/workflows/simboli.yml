@@ -1,0 +1,43 @@
+# A mano: esporta le icone delle app come maschere PNG (le usa il sito) e controlla le API di JavaScriptCore.
+name: Simboli
+on:
+  workflow_dispatch:
+
+jobs:
+  simboli:
+    runs-on: macos-latest
+    steps:
+      - name: Esporta
+        run: |
+          cat > simboli.swift <<'EOF'
+          import AppKit
+          let voci = ["app-todo": "checkmark.square.fill", "app-calendario": "calendar", "app-finanze": "eurosign.circle.fill", "app-abitudini": "checkmark.seal.fill", "app-training": "figure.run", "app-mobilita": "figure.flexibility", "app-pasti": "fork.knife"]
+          let lato = 168
+          for (nome, simbolo) in voci {
+              let conf = NSImage.SymbolConfiguration(pointSize: CGFloat(lato) / 1.2, weight: .medium)
+              guard let base = NSImage(systemSymbolName: simbolo, accessibilityDescription: nil)?.withSymbolConfiguration(conf) else { fatalError(simbolo) }
+              let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: lato, pixelsHigh: lato, bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
+              NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+              let s = base.size
+              let r = NSRect(x: (CGFloat(lato) - s.width) / 2, y: (CGFloat(lato) - s.height) / 2, width: s.width, height: s.height)
+              base.draw(in: r)
+              NSColor.black.set()
+              r.fill(using: .sourceIn)
+              NSGraphicsContext.current = nil
+              try! rep.representation(using: .png, properties: [:])!.write(to: URL(fileURLWithPath: "simboli/\(nome).png"))
+              print(nome, s)
+          }
+          EOF
+          mkdir -p simboli
+          swift simboli.swift
+          ls -la simboli
+      - name: API di JavaScriptCore
+        run: |
+          H="$(xcrun --sdk iphoneos --show-sdk-path)/System/Library/Frameworks/JavaScriptCore.framework/Headers"
+          ls "$H"
+          grep -n "API_AVAILABLE\|JSScript\|cacheBytecode\|scriptOfType" "$H/JSScript.h" | head -20 || echo "JSScript.h assente"
+          grep -n "evaluateJSScript" "$H/JSContext.h" || echo "evaluateJSScript assente"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: simboli
+          path: simboli/
