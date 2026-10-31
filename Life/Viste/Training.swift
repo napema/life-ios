@@ -1308,7 +1308,7 @@ struct CorpoMuscoli: View {
         Canvas { ctx, size in
             let scala = min(size.width / 440, size.height / 460)
             let ox = (size.width - 440 * scala) / 2
-            let disegna: (CGFloat, [E]) -> Void = { dx, voci in
+            func disegna(_ dx: CGFloat, _ voci: [E]) {
                 let x0 = ox + dx * scala
                 let sagoma = Color(uiColor: .tertiarySystemFill)
                 func ovale(_ cx: CGFloat, _ cy: CGFloat, _ rx: CGFloat, _ ry: CGFloat) -> Path {
