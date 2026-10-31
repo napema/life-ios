@@ -132,9 +132,9 @@ jobs:
           SIM=$(xcrun simctl list devices booted -j | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; print(next(x['udid'] for k in d for x in d[k]))")
           rm -rf /tmp/life-prove
           set -o pipefail
+          STATO=0
           xcodebuild test -project Life.xcodeproj -scheme Life -configuration Debug -destination "platform=iOS Simulator,id=$SIM" -derivedDataPath build-prove \
-            CODE_SIGNING_ALLOWED=YES CODE_SIGNING_REQUIRED=NO CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY=- 2>&1 | tee prove.log | { grep -E "error:|Test Case|Executed|TEST (SUCCEEDED|FAILED)|XCTAssert" || true; }
-          STATO=$?
+            CODE_SIGNING_ALLOWED=YES CODE_SIGNING_REQUIRED=NO CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY=- 2>&1 | tee prove.log | { grep -E "error:|Test Case|Executed|TEST (SUCCEEDED|FAILED)|XCTAssert" || true; } || STATO=$?
           mkdir -p screenshot/dito
           cp /tmp/life-prove/*.png screenshot/dito/ || true
           exit $STATO

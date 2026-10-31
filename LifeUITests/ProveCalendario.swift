@@ -83,6 +83,10 @@ final class ProveCalendario: XCTestCase {
         Set(app.staticTexts.allElementsBoundByIndex.map(\.label).filter { $0.contains(" – ") })
     }
 
+    private func traccia(_ app: XCUIApplication, _ dove: String) {
+        print("TRACCIA \(dove): \(app.descendants(matching: .any)["calendario.dito"].firstMatch.label)")
+    }
+
     private func riunione(_ app: XCUIApplication) -> XCUIElement {
         let r = app.staticTexts["Riunione"].firstMatch
         XCTAssertTrue(r.waitForExistence(timeout: 8), "L'evento di prova non si vede")
@@ -97,6 +101,7 @@ final class ProveCalendario: XCTestCase {
         da.press(forDuration: 0.7, thenDragTo: da.withOffset(CGVector(dx: 0, dy: 90)), withVelocity: .slow, thenHoldForDuration: 0.3)
         Thread.sleep(forTimeInterval: 1)
         foto("sposta-1-dopo")
+        traccia(app, "sposta")
         let dopo = orari(app)
         XCTAssertNotEqual(prima, dopo, "L'evento non si è spostato")
         XCTAssertFalse(app.navigationBars["Nuovo evento"].exists, "Il trascinamento ha aperto un nuovo evento")
@@ -112,6 +117,7 @@ final class ProveCalendario: XCTestCase {
         da.press(forDuration: 0.7)
         Thread.sleep(forTimeInterval: 0.6)
         foto("bordi-1-selezionato")
+        traccia(app, "bordi")
         XCTAssertEqual(prima, orari(app), "Solo tenendo premuto l'evento non deve spostarsi")
         let bordo = qualunque(app, "calendario.bordo.fine")
         XCTAssertTrue(bordo.waitForExistence(timeout: 3), "I bordi non compaiono")
@@ -135,6 +141,7 @@ final class ProveCalendario: XCTestCase {
         da.press(forDuration: 0.7, thenDragTo: da.withOffset(CGVector(dx: colonna, dy: 0)), withVelocity: .slow, thenHoldForDuration: 0.3)
         Thread.sleep(forTimeInterval: 1)
         foto("sposta-2-giorno-dopo")
+        traccia(app, "giorno-dopo")
         XCTAssertGreaterThan(riunione(app).frame.minX, xPrima + colonna / 2, "L'evento è rimasto nel suo giorno")
         app.terminate()
     }
