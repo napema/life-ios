@@ -31,8 +31,8 @@ jobs:
           xcodebuild -project Life.xcodeproj -scheme Life -configuration Release -sdk iphoneos \
             -destination 'generic/platform=iOS' -derivedDataPath build \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
-            build 2>&1 | tee build.log | grep -E "error:|warning: unre|BUILD|\*\*" || true
-          test -d build/Build/Products/Release-iphoneos/Life.app
+            build 2>&1 | tee build.log | { grep -E "error:|warning: unre|BUILD|\*\*" || true; }
+          test -x build/Build/Products/Release-iphoneos/Life.app/Life
 
       - name: Elenco degli errori
         if: failure()
@@ -51,7 +51,7 @@ jobs:
           set -x
           xcodebuild -project Life.xcodeproj -scheme Life -configuration Debug -sdk iphonesimulator \
             -destination 'generic/platform=iOS Simulator' -derivedDataPath build-sim \
-            CODE_SIGNING_ALLOWED=NO build > /dev/null 2>&1
+            CODE_SIGNING_ALLOWED=NO build > build-sim.log 2>&1
           SIM=$(xcrun simctl list devices available -j | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; print(next(x['udid'] for k in sorted(d, reverse=True) for x in d[k] if 'iPhone' in x['name'] and 'Pro' in x['name']))")
           xcrun simctl boot "$SIM"
           xcrun simctl bootstatus "$SIM" -b
@@ -72,6 +72,7 @@ jobs:
           path: |
             Life.ipa
             build.log
+            build-sim.log
             screenshot/
           if-no-files-found: warn
 

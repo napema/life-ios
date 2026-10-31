@@ -689,7 +689,7 @@ struct PesaVoce: View {
     let compra: () -> Void
 
     private func giorni(_ n: J) -> String { plurale(n, "giorno", "giorni") }
-    private func meno(_ c: Double) -> String { c > 0 ? "−\(euro(c))" : euro(0) }
+    private func meno(_ c: Double) -> String { c > 0 ? "−\(euro(c))" : euro(0.0) }
     private func uno(_ n: Double) -> String { String(format: "%.1f", n).replacingOccurrences(of: ".", with: ",").replacingOccurrences(of: ",0", with: "") }
 
     var body: some View {

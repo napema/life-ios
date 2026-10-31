@@ -274,12 +274,27 @@ struct VistaAbitudini: View {
         let attesa: Bool
     }
 
+    private func rigaProgressi(_ h: J, _ oggi: String) -> RigaProgressi {
+        let giorno = J.str(oggi)
+        let n: Int = abi("calcolo.serie", h, giorno).int ?? 0
+        let record: Int = abi("calcolo.serieMigliore", h, giorno).int ?? 0
+        let cost: Int = abi("calcolo.costanza", h, J.n(30), giorno).int ?? 0
+        let fatta: Bool = abi("calcolo.fattaIl", h, giorno).vero
+        let attesa: Bool = abi("calcolo.eAttesa", h, giorno).vero
+        return RigaProgressi(h: h, n: n, record: record, cost: cost, fatta: fatta, attesa: attesa)
+    }
+
+    private func righeProgressi(_ tutte: [J], _ oggi: String) -> [RigaProgressi] {
+        let righe: [RigaProgressi] = tutte.map { rigaProgressi($0, oggi) }
+        return righe.sorted { (a: RigaProgressi, b: RigaProgressi) -> Bool in
+            if a.n == b.n { return a.record > b.record }
+            return a.n > b.n
+        }
+    }
+
     @ViewBuilder
     private func progressi(_ tutte: [J], _ oggi: String) -> some View {
-        let righe = tutte.map { h in
-            RigaProgressi(h: h, n: abi("calcolo.serie", h, .str(oggi)).int ?? 0, record: abi("calcolo.serieMigliore", h, .str(oggi)).int ?? 0, cost: abi("calcolo.costanza", h, 30, .str(oggi)).int ?? 0, fatta: abi("calcolo.fattaIl", h, .str(oggi)).vero, attesa: abi("calcolo.eAttesa", h, .str(oggi)).vero)
-        }
-        .sorted { $0.n == $1.n ? $0.record > $1.record : $0.n > $1.n }
+        let righe = righeProgressi(tutte, oggi)
         if let m = righe.first {
             let rischio = righe.filter { $0.n > 0 && $0.attesa && !$0.fatta }
             Blocco(eti: "La più lunga") {
