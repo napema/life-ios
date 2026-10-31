@@ -4,6 +4,11 @@ import SwiftUI
 
 let margineOreCalendario: CGFloat = 50
 
+extension Color {
+    /// Un rosso solo in tutto il Calendario: lo stesso dell'app, dei pulsanti e della barra.
+    static let rossoCalendario = Color(hex: Modulo.calendario.colore)
+}
+
 /// Il giorno guardato, lo zoom delle ore e i dati già pronti per ogni giorno.
 final class StatoCalendario: ObservableObject {
     static let s = StatoCalendario()
@@ -179,10 +184,10 @@ struct TintaEvento {
             b.getRed(&r2, green: &g2, blue: &b2, alpha: &a2)
             return UIColor(red: r1 * q + r2 * (1 - q), green: g1 * q + g2 * (1 - q), blue: b1 * q + b2 * (1 - q), alpha: 1)
         }
-        let scuroFondo = UIColor(red: 0.11, green: 0.11, blue: 0.12, alpha: 1)
-        let chiaroInchiostro = UIColor(red: 0.063, green: 0.086, blue: 0.122, alpha: 1)
-        let fondo = UIColor { $0.userInterfaceStyle == .dark ? mescola(base, 0.30, scuroFondo) : mescola(base, 0.16, .white) }
-        let testo = UIColor { $0.userInterfaceStyle == .dark ? mescola(base, 0.55, .white) : mescola(base, 0.55, chiaroInchiostro) }
+        let baseScura = UIColor(red: 0x10 / 255, green: 0x10 / 255, blue: 0x10 / 255, alpha: 1)
+        let inchiostro = UIColor(red: 0x10 / 255, green: 0x16 / 255, blue: 0x1F / 255, alpha: 1)
+        let fondo = UIColor { $0.userInterfaceStyle == .dark ? mescola(base, 0.26, baseScura) : mescola(base, 0.16, .white) }
+        let testo = UIColor { $0.userInterfaceStyle == .dark ? mescola(base, 0.62, .white) : mescola(base, 0.50, inchiostro) }
         let t = TintaEvento(fondo: Color(uiColor: fondo), testo: Color(uiColor: testo), linea: Color(uiColor: base))
         memo[chiave] = t
         return t
@@ -226,6 +231,14 @@ struct VistaCalendario: View {
             }
         }
         .background(Color(uiColor: .systemBackground))
+        .overlay(alignment: .topLeading) {
+            if ProcessInfo.processInfo.environment["LIFE_DEMO"] != nil, preferenze.modoCalendario == modo {
+                Color.clear.frame(width: 2, height: 2)
+                    .accessibilityElement()
+                    .accessibilityIdentifier("calendario.visibile")
+                    .accessibilityLabel(visibile ?? "")
+            }
+        }
         .navigationTitle(titolo)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -256,11 +269,12 @@ struct VistaCalendario: View {
         .sheet(item: $editor) { b in EditorEvento(bersaglio: b) }
         .onAppear { if visibile == nil { visibile = allinea(stato.ancora ?? Tempo.oggi()) } }
         .onChange(of: visibile) { _, v in
-            if let v, v != stato.ancora { stato.ancora = v }
+            // Solo la scheda aperta decide il giorno: quelle nascoste la seguono e basta
+            if let v, preferenze.modoCalendario == modo, v != stato.ancora { stato.ancora = v }
         }
         .onChange(of: stato.ancora) { _, a in
             // Un collegamento da fuori (widget, ricerca) porta a quel giorno
-            guard let a, modo != "month", allinea(a) != visibile else { return }
+            guard let a, modo != "month", allinea(a) != visibile.map(allinea) else { return }
             visibile = allinea(a)
         }
     }
@@ -392,7 +406,7 @@ private struct ColonnaOre: View {
                     .foregroundStyle(.white)
                     .padding(.horizontal, 4)
                     .frame(height: 17)
-                    .background(Color.rosaLife, in: Capsule())
+                    .background(Color.rossoCalendario, in: Capsule())
                     .offset(x: -3, y: CGFloat(minutiCalendario(ora)) / 60 * altezza - 8.5)
             }
         }
@@ -462,7 +476,7 @@ private struct ColonnaGiorno: View {
                 ctx.stroke(sinistra, with: .color(Color.lineaLife.opacity(0.55)), lineWidth: 0.5)
             }
         }
-        .background(oggi && !unica ? Color.rosaLife.opacity(0.035) : Color.clear)
+        .background(oggi && !unica ? Color.rossoCalendario.opacity(0.035) : Color.clear)
         .contentShape(Rectangle())
         .gesture(SpatialTapGesture().onEnded { v in
             tocco()
@@ -476,8 +490,8 @@ private struct ColonnaGiorno: View {
         TimelineView(.periodic(from: .now, by: 30)) { c in
             let y = CGFloat(minutiCalendario(Tempo.oraRoma(c.date))) / 60 * altezza
             ZStack(alignment: .leading) {
-                Rectangle().fill(Color.rosaLife).frame(width: larghezza, height: 1.5)
-                Circle().fill(Color.rosaLife).frame(width: 8, height: 8)
+                Rectangle().fill(Color.rossoCalendario).frame(width: larghezza, height: 1.5)
+                Circle().fill(Color.rossoCalendario).frame(width: 8, height: 8)
             }
             .frame(height: 8)
             .offset(y: y - 4)
@@ -490,9 +504,9 @@ private struct ColonnaGiorno: View {
         if let e = b.evento {
             let proprio = !e.own_event_id.isNull
             let ripetuto = e.id.t.contains("@")
-            let vista = BloccoEventoVista(evento: e, larghezza: larghezza, altezza: h, durata: b.fine - b.inizio)
+            let vista = BloccoEventoVista(evento: e, larghezza: larghezza, altezza: h, durata: b.fine - b.inizio, colonna: b.colonna)
                 .frame(width: max(10, larghezza), height: h)
-                .contentShape(.dragPreview, RoundedRectangle(cornerRadius: 7, style: .continuous))
+                .contentShape(.dragPreview, RoundedRectangle(cornerRadius: 6, style: .continuous))
                 .contentShape(Rectangle())
                 .onTapGesture {
                     tocco()
@@ -547,49 +561,82 @@ private struct ColonnaGiorno: View {
     }
 }
 
-/// Un evento nella griglia: il testo si adatta allo spazio, come su Windows.
+/// Un evento nella griglia, come su Windows: fondo tinto, linea di lato dritta, solo le righe che
+/// entrano intere (titolo, aula e docente, gruppi, ora).
 private struct BloccoEventoVista: View {
     let evento: J
     let larghezza: CGFloat
     let altezza: CGFloat
     let durata: Int
+    var colonna = 0
 
     var body: some View {
         let lezione = evento.own_event_id.isNull ? Lezione.di(evento) : nil
         let tinta = TintaEvento.di(StatoCalendario.s.colore(evento))
-        let titolo = lezione?.titolo ?? (evento.summary.t.isEmpty ? "(senza titolo)" : evento.summary.t)
-        let inizio = Tempo.oraRoma(evento.start_at.str) ?? ""
-        let fine = Tempo.oraRoma(evento.end_at.str) ?? ""
-        let dove = lezione?.dove ?? evento.location.t
-        let stretto = larghezza < 70
-        let piccolo: CGFloat = stretto ? 10 : 11
         let passato = evento.end_at.t < Tempo.iso(Date())
-        ZStack(alignment: .topLeading) {
-            RoundedRectangle(cornerRadius: 7, style: .continuous).fill(tinta.fondo)
-            UnevenRoundedRectangle(topLeadingRadius: 7, bottomLeadingRadius: 7, style: .continuous)
-                .fill(tinta.linea)
-                .frame(width: 3.5)
-            VStack(alignment: .leading, spacing: 1) {
-                if altezza < 34 {
-                    HStack(spacing: 4) {
-                        Text(titolo).font(.system(size: stretto ? 10.5 : 12, weight: .semibold)).lineLimit(1)
-                        if larghezza > 150 { Text(inizio).font(.system(size: 11)).monospacedDigit().opacity(0.75) }
-                    }
-                } else {
-                    let righeTitolo = max(1, min(stretto ? 4 : 3, Int((altezza - (altezza > 62 ? 30 : 8)) / 15)))
-                    Text(titolo).font(.system(size: stretto ? 10 : 12.5, weight: .semibold)).lineLimit(righeTitolo).minimumScaleFactor(stretto ? 0.8 : 1)
-                    if altezza > 46, !stretto { Text("\(inizio) – \(fine)").font(.system(size: piccolo)).monospacedDigit().opacity(0.8).lineLimit(1) }
-                    if altezza > 62, !dove.isEmpty { Text(dove).font(.system(size: piccolo)).opacity(0.8).lineLimit(stretto ? 1 : 2) }
-                }
-            }
-            .foregroundStyle(tinta.testo)
-            .padding(.leading, stretto ? 5.5 : 8)
-            .padding(.trailing, stretto ? 1 : 3)
-            .padding(.top, altezza < 34 ? 3 : 4)
+        let forma = RoundedRectangle(cornerRadius: 6, style: .continuous)
+        ZStack(alignment: .leading) {
+            tinta.fondo
+            tinta.linea.frame(width: 3)
+            testi(lezione)
+                .foregroundStyle(tinta.testo)
+                .padding(.leading, stretto ? 6 : 8)
+                .padding(.trailing, stretto ? 2 : 6)
+                .padding(.top, compatto ? 0 : 3)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: compatto ? .leading : .topLeading)
         }
-        .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 7, style: .continuous).strokeBorder(Color(uiColor: .systemBackground), lineWidth: 0.75))
+        .clipShape(forma)
+        .overlay {
+            // Solo chi si sovrappone a un altro ha il contorno che li separa
+            if colonna > 0 { forma.strokeBorder(Color(uiColor: .systemBackground), lineWidth: 1.5) }
+        }
         .opacity(passato ? 0.6 : 1)
+    }
+
+    private var stretto: Bool { larghezza < 70 }
+    private var compatto: Bool { altezza < 34 }
+    private var riga: CGFloat { stretto ? 13.5 : 15 }
+    private var posti: Int { max(1, Int((altezza - (compatto ? 2 : 6)) / riga)) }
+    private var grande: CGFloat { stretto ? 11 : 12 }
+    private var piccolo: CGFloat { stretto ? 10 : 11 }
+
+    private func titolo(_ t: String, righe: Int) -> some View {
+        Text(t)
+            .font(.system(size: grande, weight: .semibold))
+            .lineLimit(righe)
+            .minimumScaleFactor(stretto ? 0.8 : 1)
+    }
+
+    private func dettaglio(_ t: String) -> some View {
+        Text(t).font(.system(size: piccolo)).monospacedDigit().opacity(0.75).lineLimit(1).frame(height: riga)
+    }
+
+    @ViewBuilder
+    private func testi(_ lezione: Lezione?) -> some View {
+        let orario = "\(Tempo.oraRoma(evento.start_at.str) ?? "") – \(Tempo.oraRoma(evento.end_at.str) ?? "")"
+        if let lezione {
+            let righeTitolo = posti >= 3 ? 2 : 1
+            let dove = lezione.dove
+            let gruppi = lezione.gruppi.joined(separator: ", ")
+            let resto = posti - righeTitolo
+            let conDove = !dove.isEmpty && resto >= 1
+            let usate = conDove ? 1 : 0
+            let conGruppi = !gruppi.isEmpty && resto - usate >= 1
+            let conOra = resto - usate - (conGruppi ? 1 : 0) >= 1
+            VStack(alignment: .leading, spacing: 0) {
+                titolo(lezione.titolo, righe: righeTitolo)
+                if conDove { dettaglio(dove) }
+                if conGruppi { dettaglio(gruppi) }
+                if conOra { dettaglio(orario) }
+            }
+        } else {
+            let nome = evento.summary.t.isEmpty ? "(senza titolo)" : evento.summary.t
+            let righeTitolo = posti >= 2 ? min(3, posti - 1) : 1
+            VStack(alignment: .leading, spacing: 0) {
+                titolo(nome, righe: righeTitolo)
+                if posti >= 2 { dettaglio(orario) }
+            }
+        }
     }
 }
 
@@ -666,9 +713,9 @@ private struct StrisciaSettimana: View {
                 Text("\(n)")
                     .font(.system(size: 17, weight: scelto || oggi ? .semibold : .regular))
                     .monospacedDigit()
-                    .foregroundStyle(scelto ? Color.white : oggi ? Color.rosaLife : Color.primary)
+                    .foregroundStyle(scelto ? (oggi ? Color.white : Color(uiColor: .systemBackground)) : oggi ? Color.rossoCalendario : Color.primary)
                     .frame(width: 32, height: 32)
-                    .background(scelto ? (oggi ? Color.rosaLife : Color.primary) : Color.clear, in: Circle())
+                    .background(scelto ? (oggi ? Color.rossoCalendario : Color.primary) : Color.clear, in: Circle())
                 Circle()
                     .fill(dati.haQualcosa && !scelto ? Color.secondarioLife : Color.clear)
                     .frame(width: 4, height: 4)
@@ -701,7 +748,7 @@ private struct TestataGiorni: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
-        .frame(height: 50)
+        .frame(height: 50, alignment: .top)
         .clipped()
         .padding(.leading, margineOreCalendario)
     }
@@ -717,13 +764,13 @@ private struct TestataGiorni: View {
             VStack(spacing: 1) {
                 Text(Tempo.settimanaBreve[Tempo.giornoSettimana(g)].prefix(quanti == 7 ? 1 : 3).uppercased())
                     .font(.system(size: 10.5, weight: .medium))
-                    .foregroundStyle(oggi ? Color.rosaLife : Color.secondarioLife)
+                    .foregroundStyle(oggi ? Color.rossoCalendario : Color.secondarioLife)
                 Text("\(n)")
                     .font(.system(size: 16, weight: oggi ? .bold : .regular))
                     .monospacedDigit()
                     .foregroundStyle(oggi ? Color.white : Color.primary)
                     .frame(width: 30, height: 30)
-                    .background(oggi ? Color.rosaLife : Color.clear, in: Circle())
+                    .background(oggi ? Color.rossoCalendario : Color.clear, in: Circle())
             }
             .frame(maxWidth: .infinity)
             .contentShape(Rectangle())
@@ -745,7 +792,7 @@ private struct RigaIntera: View {
     @State private var espansa = false
 
     var body: some View {
-        let base = Int((scorrimento.x / max(1, colonna)).rounded(.down))
+        let base = Int((scorrimento.x / max(1, colonna)).rounded())
         let da = max(0, base - 1)
         let a = min(giorni.count - 1, base + quanti + 1)
         let dati = (da...a).map { (i: $0, voci: StatoCalendario.s.giorno(giorni[$0]).interi) }
@@ -763,7 +810,7 @@ private struct RigaIntera: View {
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .topLeading)
-                .frame(height: CGFloat(righe) * 25 + 4)
+                .frame(height: CGFloat(righe) * 25 + 6, alignment: .top)
                 .clipped()
                 .padding(.leading, margineOreCalendario)
                 .overlay(alignment: .topLeading) {
@@ -910,7 +957,7 @@ private struct VistaMese: View {
                     .monospacedDigit()
                     .foregroundStyle(oggi ? Color.white : selezionato ? Color.primary : mg == m ? Color.primary : Color.terziarioLife)
                     .frame(width: 22, height: 22)
-                    .background(oggi ? Color.rosaLife : selezionato ? Color(uiColor: .tertiarySystemFill) : Color.clear, in: Circle())
+                    .background(oggi ? Color.rossoCalendario : selezionato ? Color(uiColor: .tertiarySystemFill) : Color.clear, in: Circle())
                 ForEach(0..<min(2, voci.count), id: \.self) { i in
                     chip(voci[i].titolo, voci[i].colore, task: voci[i].task, attenuato: mg != m)
                 }

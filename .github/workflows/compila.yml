@@ -125,6 +125,20 @@ jobs:
           xcrun simctl spawn "$SIM" launchctl list | grep -q "it.life.app"
           xcrun simctl io "$SIM" screenshot "screenshot/avvio-vero.png"
 
+      - name: Prova il dito sul Calendario
+        continue-on-error: true
+        timeout-minutes: 15
+        run: |
+          SIM=$(xcrun simctl list devices booted -j | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; print(next(x['udid'] for k in d for x in d[k]))")
+          rm -rf /tmp/life-prove
+          set -o pipefail
+          xcodebuild test -project Life.xcodeproj -scheme Life -configuration Debug -destination "platform=iOS Simulator,id=$SIM" -derivedDataPath build-prove \
+            CODE_SIGNING_ALLOWED=YES CODE_SIGNING_REQUIRED=NO CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY=- 2>&1 | tee prove.log | { grep -E "error:|Test Case|Executed|TEST (SUCCEEDED|FAILED)|XCTAssert" || true; }
+          STATO=$?
+          mkdir -p screenshot/dito
+          cp /tmp/life-prove/*.png screenshot/dito/ || true
+          exit $STATO
+
       - name: Prova l'aggiornamento della logica
         continue-on-error: true
         run: |
@@ -182,5 +196,6 @@ jobs:
             Life.ipa
             build.log
             build-sim.log
+            prove.log
             screenshot/
           if-no-files-found: warn
