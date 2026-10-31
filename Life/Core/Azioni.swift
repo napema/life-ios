@@ -174,7 +174,7 @@ enum Azioni {
 
     /// Crea un task. Il testo si interpreta in linguaggio naturale («domani alle 15 #Studio !2»).
     @discardableResult
-    static func creaTask(testo: String, contesto: [String: J] = [:], interpreta: Bool = true) -> J? {
+    static func creaTask(testo: String, contesto: [String: J] = [:], interpreta: Bool = true, scelte: [String: J] = [:], promemoriaAuto: Bool = true) -> J? {
         let pulito = testo.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !pulito.isEmpty else { return nil }
         let base = contesto["project_id"]?.str ?? inbox?.id.str ?? ""
@@ -201,8 +201,13 @@ enum Azioni {
                 t["heading_id"] = nil
             }
         }
+        // Le scelte fatte a mano valgono più di quello che si capisce dal testo
+        for (k, v) in scelte { t[k] = v }
+        if scelte["due_at"] != nil { conOra = t.due_has_time.vero }
+        // Ciò che si ripete parte da una data
+        if t.rrule.vero, t.due_at.isNull { t["due_at"] = scadenza(Tempo.oggi(), nil).0 }
         a.scrivi("tasks", t)
-        if conOra, Preferenze.s.promemoriaAutomatico { aggiungiPromemoria(t, minutiPrima: 0) }
+        if conOra, promemoriaAuto, Preferenze.s.promemoriaAutomatico { aggiungiPromemoria(t, minutiPrima: 0) }
         return t
     }
 
@@ -369,12 +374,12 @@ enum Azioni {
             m["evening"] = true
             etichetta = "Questa sera"
         case .unGiorno:
-            m["due_at"] = nil
+            m["due_at"] = J.null
             m["due_has_time"] = false
             m["someday"] = true
             etichetta = "Un giorno"
         case .nessuno:
-            m["due_at"] = nil
+            m["due_at"] = J.null
             m["due_has_time"] = false
             etichetta = "Data rimossa"
         case .data(let g, let o):

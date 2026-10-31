@@ -238,13 +238,23 @@ struct BarraGestiFinanze: View {
     var body: some View {
         HStack(spacing: 4) {
             Button { fogli.apri(.movimento(nil, "out", nil)) } label: { Label("Uscita", systemImage: "minus").fontWeight(.semibold) }
-                .foregroundStyle(Color(hex: "#FF9500"))
+                .foregroundStyle(Color.pericoloLife)
             Spacer(minLength: 6)
-            Button { fogli.apri(.movimento(nil, "in", nil)) } label: { Label("Entrata", systemImage: "plus") }
+            Button { fogli.apri(.movimento(nil, "in", nil)) } label: { Label("Entrata", systemImage: "plus").fontWeight(.semibold) }
+                .foregroundStyle(Color.successoLife)
             Spacer(minLength: 6)
-            Button { fogli.apri(.previsto) } label: { Image(systemName: "calendar") }.accessibilityLabel("Previsti")
-            Button { fogli.apri(.lista) } label: { Image(systemName: "clock") }.accessibilityLabel("Lista d'attesa")
-            Button { fogli.apri(.movimento(nil, "giro", nil)) } label: { Image(systemName: "arrow.left.arrow.right") }.accessibilityLabel("Giroconto")
+            Menu {
+                Button { fogli.apri(.previsto) } label: { Label("Pagamento previsto", systemImage: "calendar") }
+                Button { fogli.apri(.lista) } label: { Label("Lista d'attesa", systemImage: "clock") }
+                Button { fogli.apri(.movimento(nil, "giro", nil)) } label: { Label("Giroconto, rimborso, reso, ricarica", systemImage: "arrow.left.arrow.right") }
+            } label: {
+                Image(systemName: "ellipsis")
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(Color.primary)
+                    .frame(width: 44, height: 36)
+                    .contentShape(Rectangle())
+            }
+            .accessibilityLabel("Altre azioni")
         }
         .font(.subheadline)
         .buttonStyle(.plain)
@@ -344,6 +354,7 @@ struct GrigliaApp: View {
         }
         .background(Color.sfondoLife)
         .navigationTitle("App")
+        .toolbarTitleDisplayMode(.inlineLarge)
         .toolbar { BottoneImpostazioni() }
     }
 }
@@ -431,6 +442,7 @@ struct VistaCerca: View {
             }
         }
         .navigationTitle("Cerca")
+        .toolbarTitleDisplayMode(.inlineLarge)
         .searchable(text: $testo, prompt: "Task, eventi, movimenti, app")
     }
 

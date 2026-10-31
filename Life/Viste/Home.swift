@@ -95,6 +95,7 @@ struct Home: View {
         .background(Color.sfondoLife)
         .navigationTitle(logica.chiama("home.saluto", .n(Calendar.current.component(.hour, from: ora))).t)
         .navigationSubtitle(dataLunga(oggi))
+        .toolbarTitleDisplayMode(.inlineLarge)
         .toolbar { BottoneImpostazioni() }
         .sheet(item: $taskAperto) { a in SchedaTask(idTask: a.task.id.t) }
         .onReceive(Timer.publish(every: 30, on: .main, in: .common).autoconnect()) { ora = $0 }

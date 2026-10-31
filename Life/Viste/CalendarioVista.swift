@@ -337,6 +337,7 @@ private struct GrigliaGiorni: View {
                     orizzontale(colonna: colonna)
                 }
                 .frame(height: stato.altezzaOra * 24)
+                .background(AgganciaDito(giorni: Self.giorni, colonna: colonna, quanti: quanti, scorrimento: scorrimento, visibile: $visibile))
             }
             .scrollIndicators(.hidden)
             .simultaneousGesture(
@@ -409,12 +410,13 @@ private struct ColonnaOre: View {
                     .background(Color.rossoCalendario, in: Capsule())
                     .offset(x: -3, y: CGFloat(minutiCalendario(ora)) / 60 * altezza - 8.5)
             }
+            OraPresa(altezza: altezza)
         }
         .frame(width: margineOreCalendario, height: altezza * 24, alignment: .topTrailing)
     }
 }
 
-/// Un giorno: le linee delle ore, gli eventi, il tocco sul vuoto, il rilascio di ciò che trascini.
+/// Un giorno: le linee delle ore, gli eventi, il tocco sul vuoto.
 private struct ColonnaGiorno: View {
     let g: String
     let altezza: CGFloat
@@ -451,13 +453,10 @@ private struct ColonnaGiorno: View {
                         .allowsHitTesting(false)
                 }
                 if oggi { lineaAdesso(larghezza: geo.size.width) }
+                StratoPresa(g: g, altezza: altezza, larghezza: geo.size.width)
             }
         }
         .frame(height: altezza * 24)
-        .dropDestination(for: String.self) { voci, punto in
-            guard let v = voci.first else { return false }
-            return rilascia(v, y: punto.y)
-        }
     }
 
     private var sfondo: some View {
@@ -502,62 +501,462 @@ private struct ColonnaGiorno: View {
     @ViewBuilder
     private func bloccoVista(_ b: BloccoEvento, larghezza: CGFloat, altezza h: CGFloat) -> some View {
         if let e = b.evento {
-            let proprio = !e.own_event_id.isNull
-            let ripetuto = e.id.t.contains("@")
-            let vista = BloccoEventoVista(evento: e, larghezza: larghezza, altezza: h, durata: b.fine - b.inizio, colonna: b.colonna)
-                .frame(width: max(10, larghezza), height: h)
-                .contentShape(.dragPreview, RoundedRectangle(cornerRadius: 6, style: .continuous))
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    tocco()
-                    apriEvento(e)
-                }
-                .matchedTransitionSource(id: e.id.t, in: zoom)
-                .contextMenu {
-                    Button { apriEvento(e) } label: { Label("Apri", systemImage: "arrow.up.left.and.arrow.down.right") }
-                    if proprio, !ripetuto {
-                        Button { sposta(e, minuti: 30) } label: { Label("Più tardi di 30 minuti", systemImage: "clock.arrow.circlepath") }
-                        Button { sposta(e, giorni: 1) } label: { Label("A domani", systemImage: "arrow.right") }
-                        Button(role: .destructive) { Azioni.eliminaEvento(e.own_event_id.t) } label: { Label("Elimina", systemImage: "trash") }
+            SeNonPreso(id: b.id) {
+                BloccoEventoVista(evento: e, larghezza: larghezza, altezza: h, durata: b.fine - b.inizio, colonna: b.colonna)
+                    .frame(width: max(10, larghezza), height: h)
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        tocco()
+                        apriEvento(e)
                     }
-                }
-            if proprio, !ripetuto {
-                vista.draggable("evento:\(e.own_event_id.t)")
-            } else {
-                vista
+                    .matchedTransitionSource(id: e.id.t, in: zoom)
             }
         } else if let t = b.task {
-            BloccoTaskVista(task: t, stretto: larghezza < 70)
-                .frame(width: max(10, larghezza), height: min(h, 26))
-                .onTapGesture { apriTask(t) }
-                .draggable("task:\(t.id.t)")
+            SeNonPreso(id: b.id) {
+                BloccoTaskVista(task: t, stretto: larghezza < 70)
+                    .frame(width: max(10, larghezza), height: min(h, 26))
+                    .onTapGesture { apriTask(t) }
+            }
+        }
+    }
+}
+
+// MARK: - Spostare con il dito
+
+/// Il blocco preso: tieni premuto e trascina per spostarlo (anche su un altro giorno); tieni premuto e
+/// lascia per tirarne i bordi. Si muove di 5 minuti, di 1 con le ore ingrandite.
+private final class Trascinamento: ObservableObject {
+    static let s = Trascinamento()
+
+    struct Presa: Equatable {
+        let id: String
+        let evento: J?
+        let task: J?
+        let giornoOrigine: String
+        let inizioOrigine: Int
+        let fineOrigine: Int
+        var giorno: String
+        var inizio: Int
+        var fine: Int
+        var cambiata: Bool { giorno != giornoOrigine || inizio != inizioOrigine || fine != fineOrigine }
+    }
+
+    @Published var presa: Presa?
+    @Published var selezionata = false
+}
+
+/// A parte, così i blocchi fermi non si ridisegnano a ogni passo del dito.
+private final class BloccoPreso: ObservableObject {
+    static let s = BloccoPreso()
+    @Published var id: String?
+}
+
+private func oraCalendario(_ m: Int) -> String { String(format: "%02d:%02d", m / 60, m % 60) }
+
+private struct SeNonPreso<Contenuto: View>: View {
+    let id: String
+    @ViewBuilder var contenuto: () -> Contenuto
+    @ObservedObject private var preso = BloccoPreso.s
+    var body: some View { contenuto().opacity(preso.id == id ? 0.3 : 1) }
+}
+
+/// Il blocco che segue il dito, nel giorno e all'ora in cui cadrebbe.
+private struct StratoPresa: View {
+    let g: String
+    let altezza: CGFloat
+    let larghezza: CGFloat
+    @ObservedObject private var t = Trascinamento.s
+
+    var body: some View {
+        if let p = t.presa, p.giorno == g {
+            let w = larghezza - 2
+            let h = max(22, CGFloat(p.fine - p.inizio) / 60 * altezza - 1.5)
+            Group {
+                if let e = p.evento.map({ conOrari($0, p) }) {
+                    BloccoEventoVista(evento: e, larghezza: w, altezza: h, durata: p.fine - p.inizio, sollevato: true)
+                        .frame(width: w, height: h)
+                        .overlay(alignment: .topLeading) { if t.selezionata { bordo(e, "calendario.bordo.inizio").offset(x: 14, y: -5) } }
+                        .overlay(alignment: .bottomTrailing) { if t.selezionata { bordo(e, "calendario.bordo.fine").offset(x: -14, y: 5) } }
+                } else if let task = p.task {
+                    BloccoTaskVista(task: task, stretto: w < 70).frame(width: w, height: 26)
+                }
+            }
+            .scaleEffect(t.selezionata ? 1 : 1.02)
+            .shadow(color: .black.opacity(0.28), radius: 10, y: 5)
+            .offset(x: 1, y: CGFloat(p.inizio) / 60 * altezza + 0.75)
+            .animation(.interactiveSpring(duration: 0.12), value: p.inizio)
+            .allowsHitTesting(false)
         }
     }
 
-    private func sposta(_ e: J, minuti: Int = 0, giorni: Int = 0) {
-        guard let id = e.own_event_id.str, let s = Tempo.data(e.start_at.str), let f = Tempo.data(e.end_at.str) else { return }
-        let d = TimeInterval(minuti * 60 + giorni * 86400)
-        Azioni.salvaEvento(id: id, valori: ["start_at": .str(Tempo.iso(s.addingTimeInterval(d))), "end_at": .str(Tempo.iso(f.addingTimeInterval(d)))], minutiPromemoria: Azioni.promemoria(evento: id).compactMap { $0.offset_minutes.int })
+    /// L'evento con l'ora a cui cadrebbe: il blocco la scrive mentre si muove.
+    private func conOrari(_ evento: J, _ p: Trascinamento.Presa) -> J {
+        let inizio = Tempo.istante(g, oraCalendario(p.inizio))
+        var e = evento
+        e["start_at"] = .str(Tempo.iso(inizio))
+        e["end_at"] = .str(Tempo.iso(inizio.addingTimeInterval(Double(p.fine - p.inizio) * 60)))
+        return e
     }
 
-    private func rilascia(_ v: String, y: CGFloat) -> Bool {
-        let m = min(24 * 60 - 15, max(0, Int(y / altezza * 60) / 15 * 15))
-        let ora = String(format: "%02d:%02d", m / 60, m % 60)
+    private func bordo(_ e: J, _ id: String) -> some View {
+        Circle()
+            .fill(Color(uiColor: .systemBackground))
+            .overlay(Circle().strokeBorder(TintaEvento.di(StatoCalendario.s.colore(e)).linea, lineWidth: 2))
+            .frame(width: 11, height: 11)
+            .accessibilityElement()
+            .accessibilityIdentifier(id)
+    }
+}
+
+/// L'ora a cui cadrà, nella colonna delle ore.
+private struct OraPresa: View {
+    let altezza: CGFloat
+    @ObservedObject private var t = Trascinamento.s
+
+    var body: some View {
+        if let p = t.presa {
+            let tinta = TintaEvento.di(p.evento.flatMap { StatoCalendario.s.colore($0) })
+            let tiraLaFine = p.inizio == p.inizioOrigine && p.fine != p.fineOrigine
+            let m = tiraLaFine ? p.fine : p.inizio
+            Text(oraCalendario(m == 24 * 60 ? 0 : m))
+                .font(.system(size: 11, weight: .bold))
+                .monospacedDigit()
+                .foregroundStyle(.white)
+                .padding(.horizontal, 4)
+                .frame(height: 17)
+                .background(p.evento == nil ? Color.accentoLife : tinta.linea, in: Capsule())
+                .offset(x: -3, y: CGFloat(m) / 60 * altezza - 8.5)
+        }
+    }
+}
+
+/// Il gesto vive sulla ScrollView delle ore: resta vivo anche quando i giorni scorrono sotto il dito,
+/// e se sotto non c'è niente da prendere la ScrollView scorre come sempre.
+private struct AgganciaDito: UIViewRepresentable {
+    let giorni: [String]
+    let colonna: CGFloat
+    let quanti: Int
+    let scorrimento: ScorrimentoCalendario
+    @Binding var visibile: String?
+
+    func makeUIView(context: Context) -> SondaDito { SondaDito() }
+
+    func updateUIView(_ v: SondaDito, context: Context) {
+        let dito = v.dito
+        dito.giorni = giorni
+        dito.colonna = colonna
+        dito.quanti = quanti
+        dito.scorrimentoX = { [scorrimento] in scorrimento.x }
+        let visibile = $visibile
+        dito.vai = { g in withAnimation(.snappy) { visibile.wrappedValue = g } }
+    }
+}
+
+private final class SondaDito: UIView {
+    let dito = ControlloreDito()
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        isUserInteractionEnabled = false
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        guard window != nil else {
+            dito.lascia()
+            return
+        }
+        var v = superview
+        while let c = v {
+            if let s = c as? UIScrollView {
+                dito.aggancia(s)
+                return
+            }
+            v = c.superview
+        }
+    }
+}
+
+private final class ControlloreDito: NSObject, UIGestureRecognizerDelegate {
+    enum Gesto { case sposta, inizio, fine }
+
+    var giorni: [String] = []
+    var colonna: CGFloat = 1
+    var quanti = 1
+    var scorrimentoX: () -> CGFloat = { 0 }
+    var vai: (String) -> Void = { _ in }
+
+    private weak var scroll: UIScrollView?
+    private weak var interno: UIScrollView?
+    /// Tieni premuto su un blocco per prenderlo.
+    private let lunga = UILongPressGestureRecognizer()
+    /// Con un blocco selezionato, ogni tocco è per lui: i bordi, lo spostamento, o lasciarlo.
+    private let subito = UILongPressGestureRecognizer()
+    private weak var attivo: UIGestureRecognizer?
+    private var gesto = Gesto.sposta
+    private var appiglio = 0.0
+    private var partenza = CGPoint.zero
+    private var mosso = false
+    private var mia = false
+    private var collegamento: CADisplayLink?
+    private var alBordoDa: CFTimeInterval?
+    private let passi = UISelectionFeedbackGenerator()
+
+    private var stato: Trascinamento { .s }
+    private var altezza: CGFloat { StatoCalendario.s.altezzaOra }
+
+    override init() {
+        super.init()
+        lunga.minimumPressDuration = 0.28
+        lunga.allowableMovement = 10
+        lunga.delegate = self
+        lunga.addTarget(self, action: #selector(gestoLungo(_:)))
+        subito.minimumPressDuration = 0
+        subito.allowableMovement = .greatestFiniteMagnitude
+        subito.isEnabled = false
+        subito.addTarget(self, action: #selector(gestoSubito(_:)))
+    }
+
+    func aggancia(_ s: UIScrollView) {
+        guard scroll !== s else { return }
+        scroll = s
+        s.addGestureRecognizer(lunga)
+        s.addGestureRecognizer(subito)
+    }
+
+    func gestureRecognizer(_ g: UIGestureRecognizer, shouldReceive tocco: UITouch) -> Bool {
+        guard let scroll, stato.presa == nil else { return false }
+        return bloccoSotto(tocco.location(in: scroll)) != nil
+    }
+
+    // MARK: Cosa c'è sotto il dito
+
+    private func indiceColonna(_ x: CGFloat) -> Int {
+        Int(((x - margineOreCalendario + scorrimentoX()) / max(1, colonna)).rounded(.down))
+    }
+
+    private func spostabile(_ b: BloccoEvento) -> Bool {
+        if b.task != nil { return true }
+        guard let e = b.evento, !e.own_event_id.isNull, !e.id.t.contains("@"), !e.all_day.vero, let f = Tempo.data(e.end_at.str) else { return false }
+        return Tempo.dataRoma(e.start_at.str) == Tempo.dataRoma(f.addingTimeInterval(-1))
+    }
+
+    private func bloccoSotto(_ p: CGPoint) -> (blocco: BloccoEvento, giorno: String)? {
+        guard p.x >= margineOreCalendario else { return nil }
+        let i = indiceColonna(p.x)
+        guard giorni.indices.contains(i) else { return nil }
+        let x = p.x - margineOreCalendario + scorrimentoX() - CGFloat(i) * colonna
+        for b in StatoCalendario.s.giorno(giorni[i]).blocchi.reversed() {
+            let w = (colonna - 2) / CGFloat(b.colonne)
+            let sinistra = w * CGFloat(b.colonna) + 1
+            let alto = CGFloat(b.inizio) / 60 * altezza
+            let h = b.task != nil ? 26 : max(22, CGFloat(b.fineVisiva - b.inizio) / 60 * altezza)
+            if x >= sinistra, x <= sinistra + w * CGFloat(b.larghezza), p.y >= alto, p.y <= alto + h {
+                return spostabile(b) ? (b, giorni[i]) : nil
+            }
+        }
+        return nil
+    }
+
+    private func rettangoloPresa() -> CGRect? {
+        guard let p = stato.presa, let i = giorni.firstIndex(of: p.giorno) else { return nil }
+        let x = margineOreCalendario + CGFloat(i) * colonna - scorrimentoX() + 1
+        let y = CGFloat(p.inizio) / 60 * altezza
+        return CGRect(x: x, y: y, width: colonna - 2, height: max(22, CGFloat(p.fine - p.inizio) / 60 * altezza))
+    }
+
+    // MARK: I gesti
+
+    @objc private func gestoLungo(_ g: UILongPressGestureRecognizer) {
+        guard let scroll else { return }
+        let p = g.location(in: scroll)
+        switch g.state {
+        case .began:
+            guard let (b, giorno) = bloccoSotto(p) else {
+                g.isEnabled = false
+                g.isEnabled = true
+                return
+            }
+            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+            stato.presa = Trascinamento.Presa(id: b.id, evento: b.evento, task: b.task, giornoOrigine: giorno, inizioOrigine: b.inizio, fineOrigine: b.fine, giorno: giorno, inizio: b.inizio, fine: b.fine)
+            BloccoPreso.s.id = b.id
+            mia = true
+            comincia(g, .sposta, p)
+        case .changed: muovi(p)
+        case .ended: rilascia()
+        case .cancelled, .failed: lascia()
+        default: break
+        }
+    }
+
+    @objc private func gestoSubito(_ g: UILongPressGestureRecognizer) {
+        guard let scroll else { return }
+        let p = g.location(in: scroll)
+        switch g.state {
+        case .began:
+            guard let r = rettangoloPresa(), stato.presa != nil else {
+                lascia()
+                return
+            }
+            let conBordi = stato.presa?.evento != nil
+            if conBordi, abs(p.y - r.minY) < 22, r.insetBy(dx: -10, dy: -22).contains(p) {
+                comincia(g, .inizio, p)
+            } else if conBordi, abs(p.y - r.maxY) < 22, r.insetBy(dx: -10, dy: -22).contains(p) {
+                comincia(g, .fine, p)
+            } else if r.contains(p) {
+                comincia(g, .sposta, p)
+            } else {
+                lascia()
+            }
+        case .changed: muovi(p)
+        case .ended: rilascia()
+        case .cancelled, .failed: if attivo != nil { fermaDito() }
+        default: break
+        }
+    }
+
+    private func comincia(_ g: UIGestureRecognizer, _ tipo: Gesto, _ p: CGPoint) {
+        attivo = g
+        gesto = tipo
+        partenza = p
+        mosso = false
+        alBordoDa = nil
+        appiglio = Double(p.y) / Double(altezza) * 60 - Double(stato.presa?.inizio ?? 0)
+        interno = interno ?? primaScrollDentro(scroll)
+        scroll?.isScrollEnabled = false
+        interno?.isScrollEnabled = false
+        passi.prepare()
+        let c = CADisplayLink(target: self, selector: #selector(battito))
+        c.add(to: .main, forMode: .common)
+        collegamento = c
+    }
+
+    private func primaScrollDentro(_ v: UIView?) -> UIScrollView? {
+        for s in v?.subviews ?? [] {
+            if let x = s as? UIScrollView { return x }
+            if let x = primaScrollDentro(s) { return x }
+        }
+        return nil
+    }
+
+    private func arrotonda(_ m: Double) -> Int {
+        let passo = altezza >= 90 ? 1.0 : 5.0
+        return Int((m / passo).rounded() * passo)
+    }
+
+    private func muovi(_ p: CGPoint) {
+        guard var n = stato.presa else { return }
+        // Un dito fermo trema: finché non parte davvero, il blocco non si muove
+        if !mosso {
+            guard hypot(p.x - partenza.x, p.y - partenza.y) > 8 else { return }
+            mosso = true
+        }
+        let minuti = Double(p.y) / Double(altezza) * 60
+        switch gesto {
+        case .sposta:
+            let durata = n.fine - n.inizio
+            n.inizio = min(24 * 60 - durata, max(0, arrotonda(minuti - appiglio)))
+            n.fine = n.inizio + durata
+            let primo = Int((scorrimentoX() / max(1, colonna)).rounded())
+            let i = min(primo + quanti - 1, max(primo, indiceColonna(p.x)))
+            if giorni.indices.contains(i) { n.giorno = giorni[i] }
+        case .inizio:
+            n.inizio = max(0, min(n.fine - 5, arrotonda(minuti)))
+        case .fine:
+            n.fine = min(24 * 60, max(n.inizio + 5, arrotonda(minuti)))
+        }
+        if n != stato.presa {
+            stato.presa = n
+            passi.selectionChanged()
+        }
+    }
+
+    /// Al bordo la griglia va avanti da sola: su e giù per le ore, di lato per i giorni.
+    @objc private func battito() {
+        guard let scroll, let attivo else { return }
+        let p = attivo.location(in: scroll)
+        let visibile = scroll.bounds.height - scroll.adjustedContentInset.bottom
+        let y = p.y - scroll.contentOffset.y
+        let fascia: CGFloat = 56
+        var v: CGFloat = 0
+        if y < fascia { v = -(fascia - y) / fascia * 9 } else if y > visibile - fascia { v = (y - (visibile - fascia)) / fascia * 9 }
+        if v != 0, mosso {
+            let massimo = max(-scroll.adjustedContentInset.top, scroll.contentSize.height - scroll.bounds.height + scroll.adjustedContentInset.bottom)
+            scroll.contentOffset.y = min(massimo, max(-scroll.adjustedContentInset.top, scroll.contentOffset.y + v))
+        }
+        if gesto == .sposta, mosso {
+            let aSinistra = p.x < margineOreCalendario + 20
+            let aDestra = p.x > scroll.bounds.width - 20
+            if aSinistra || aDestra {
+                let ora = CACurrentMediaTime()
+                if let da = alBordoDa {
+                    if ora - da > 0.55 {
+                        alBordoDa = ora
+                        let primo = Int((scorrimentoX() / max(1, colonna)).rounded())
+                        let salto = quanti == 7 ? 7 : 1
+                        let i = primo + (aDestra ? salto : -salto)
+                        if giorni.indices.contains(i) {
+                            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                            vai(giorni[i])
+                        }
+                    }
+                } else {
+                    alBordoDa = ora
+                }
+            } else {
+                alBordoDa = nil
+            }
+        }
+        muovi(p)
+    }
+
+    private func fermaDito() {
+        collegamento?.invalidate()
+        collegamento = nil
+        attivo = nil
+        scroll?.isScrollEnabled = true
+        interno?.isScrollEnabled = true
+    }
+
+    private func rilascia() {
+        fermaDito()
+        guard let p = stato.presa else { return }
+        if p.cambiata {
+            salva(p)
+            lascia()
+        } else if !stato.selezionata {
+            // Preso e lasciato lì: si possono tirare i bordi
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            if p.evento != nil {
+                stato.selezionata = true
+                subito.isEnabled = true
+            } else {
+                lascia()
+            }
+        }
+    }
+
+    func lascia() {
+        fermaDito()
+        subito.isEnabled = false
+        guard mia else { return }
+        mia = false
+        stato.presa = nil
+        stato.selezionata = false
+        BloccoPreso.s.id = nil
+    }
+
+    private func salva(_ p: Trascinamento.Presa) {
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-        if v.hasPrefix("evento:") {
-            let id = String(v.dropFirst(7))
-            guard let e = Archivio.s.riga("events", id), let s = Tempo.data(e.start_at.str), let f = Tempo.data(e.end_at.str) else { return false }
-            let nuovoInizio = Tempo.istante(g, ora)
-            let fine = nuovoInizio.addingTimeInterval(f.timeIntervalSince(s))
-            Azioni.salvaEvento(id: id, valori: ["start_at": .str(Tempo.iso(nuovoInizio)), "end_at": .str(Tempo.iso(fine))], minutiPromemoria: Azioni.promemoria(evento: id).compactMap { $0.offset_minutes.int })
-            return true
+        let inizio = Tempo.istante(p.giorno, oraCalendario(p.inizio))
+        if let e = p.evento, let id = e.own_event_id.str {
+            let fine = inizio.addingTimeInterval(Double(p.fine - p.inizio) * 60)
+            Azioni.salvaEvento(id: id, valori: ["start_at": .str(Tempo.iso(inizio)), "end_at": .str(Tempo.iso(fine))], minutiPromemoria: Azioni.promemoria(evento: id).compactMap { $0.offset_minutes.int })
+        } else if let t = p.task {
+            Azioni.modifica(t.id.t, ["due_at": .str(Tempo.iso(inizio)), "due_has_time": true], "Task spostato")
         }
-        if v.hasPrefix("task:") {
-            let id = String(v.dropFirst(5))
-            Azioni.modifica(id, ["due_at": .str(Tempo.iso(Tempo.istante(g, ora))), "due_has_time": true], "Task spostato")
-            return true
-        }
-        return false
     }
 }
 
@@ -569,6 +968,7 @@ private struct BloccoEventoVista: View {
     let altezza: CGFloat
     let durata: Int
     var colonna = 0
+    var sollevato = false
 
     var body: some View {
         let lezione = evento.own_event_id.isNull ? Lezione.di(evento) : nil
@@ -590,7 +990,7 @@ private struct BloccoEventoVista: View {
             // Solo chi si sovrappone a un altro ha il contorno che li separa
             if colonna > 0 { forma.strokeBorder(Color(uiColor: .systemBackground), lineWidth: 1.5) }
         }
-        .opacity(passato ? 0.6 : 1)
+        .opacity(passato && !sollevato ? 0.6 : 1)
     }
 
     private var stretto: Bool { larghezza < 70 }

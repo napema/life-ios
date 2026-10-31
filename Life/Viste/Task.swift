@@ -206,6 +206,7 @@ struct ListaTask: View {
                         .frame(width: 56, height: 56)
                         .glassEffect(.regular.tint(Color.accentoLife).interactive(), in: .circle)
                 }
+                .accessibilityLabel("Nuovo task")
                 .padding(.trailing, 18)
                 .padding(.bottom, 16)
             }
@@ -314,50 +315,478 @@ enum Domanda {
 
 // MARK: - Nuovo task
 
+/// Il pannello del «+»: sale dal basso sopra la tastiera, con le opzioni della scheda di Windows.
+/// Quello che scrivi nel titolo («domani alle 15 #Studio !2») accende da solo le sue voci.
 struct NuovoTask: View {
     let contesto: [String: J]
+    private enum Campo: Hashable {
+        case titolo, note
+        case voce(String)
+    }
+    private enum Calendario: Identifiable {
+        case quando, scadenza, promemoria
+        var id: Self { self }
+    }
+
     @State private var testo = ""
-    @FocusState private var fuoco: Bool
+    @State private var note = ""
+    @State private var conNote = false
+    @State private var voci: [J] = []
+    @State private var quando: Azioni.Quando?
+    @State private var scadenza: String?
+    @State private var priorita: Int?
+    @State private var lista: (progetto: String, intestazione: String?)?
+    @State private var etichette: [String] = []
+    @State private var regola: String?
+    @State private var minutiPrima: Set<Int> = []
+    @State private var alle: [Date] = []
+    @State private var calendario: Calendario?
+    @State private var altezza: CGFloat = 190
+    @FocusState private var fuoco: Campo?
     @Environment(\.dismiss) private var chiudi
 
-    private var anteprima: String {
-        let t = testo.trimmingCharacters(in: .whitespaces)
-        guard !t.isEmpty else { return "" }
-        let p = Logica.s.chiama("parser.parseTask", .str(t), ["projects": .arr(Azioni.progetti.map { .str($0.name.t) })])
-        let d = Logica.s.chiama("parser.describeParse", p).t
-        return d.isEmpty ? "" : "\(p.title.t) · \(d)"
+    private var vuoto: Bool { testo.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+
+    /// Quello che si capisce da ciò che è scritto.
+    private var capito: J {
+        guard !vuoto else { return .null }
+        return Logica.s.chiama("parser.parseTask", .str(testo), ["projects": .arr(Azioni.progetti.map { .str($0.name.t) })])
     }
 
     var body: some View {
-        NavigationStack {
-            VStack(alignment: .leading, spacing: 10) {
-                TextField("Cosa devi fare?", text: $testo, axis: .vertical)
-                    .font(.title3)
-                    .focused($fuoco)
-                    .submitLabel(.done)
-                    .onSubmit(salva)
-                if !anteprima.isEmpty {
-                    Text(anteprima).font(.footnote).foregroundStyle(Color.accentoLife)
-                } else {
-                    Text("Scrivi anche «domani alle 15 #Studio !2»: lo capisco.").font(.footnote).foregroundStyle(Color.terziarioLife)
+        let p = capito
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .top, spacing: 10) {
+                    TextField("Cosa devi fare?", text: $testo, axis: .vertical)
+                        .font(.title3.weight(.medium))
+                        .lineLimit(1...4)
+                        .focused($fuoco, equals: .titolo)
+                        .submitLabel(.send)
+                        .padding(.top, 5)
+                        .onChange(of: testo) { _, v in
+                            // Invio aggiunge il task, non va a capo
+                            guard v.contains("\n") else { return }
+                            testo = v.replacingOccurrences(of: "\n", with: "")
+                            salva()
+                        }
+                    Button(action: salva) {
+                        Image(systemName: "arrow.up").font(.body.weight(.bold)).frame(width: 26, height: 26)
+                    }
+                    .buttonStyle(.glassProminent)
+                    .buttonBorderShape(.circle)
+                    .disabled(vuoto)
+                    .accessibilityLabel("Aggiungi")
                 }
-                Spacer()
+                if conNote {
+                    TextField("Note", text: $note, axis: .vertical)
+                        .font(.subheadline)
+                        .lineLimit(1...5)
+                        .focused($fuoco, equals: .note)
+                }
+                if !voci.isEmpty { checklist }
+                FlussoGettoni(spazio: 8) {
+                    menuQuando(p)
+                    menuScadenza
+                    menuPriorita(p)
+                    menuLista(p)
+                    menuEtichette
+                    menuRipeti(p)
+                    menuPromemoria(p)
+                    Button {
+                        tocco()
+                        aggiungiVoce()
+                    } label: {
+                        gettone(voci.isEmpty ? "Checklist" : "Checklist · \(voci.count)", "checklist", acceso: !voci.isEmpty)
+                    }
+                    Button {
+                        tocco()
+                        conNote.toggle()
+                        fuoco = conNote ? .note : .titolo
+                    } label: {
+                        gettone("Note", "text.alignleft", acceso: conNote)
+                    }
+                }
             }
-            .padding(20)
-            .navigationTitle("Nuovo task")
+            .padding(.horizontal, 18)
+            .padding(.top, 24)
+            .padding(.bottom, 12)
+            .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { altezza = $0 }
+        }
+        .scrollBounceBehavior(.basedOnSize)
+        .buttonStyle(.plain)
+        .presentationDetents([.height(min(altezza, 560))])
+        .presentationDragIndicator(.visible)
+        .animation(.snappy(duration: 0.2), value: altezza)
+        .onAppear { fuoco = .titolo }
+        .sheet(item: $calendario, onDismiss: { fuoco = .titolo }) { c in
+            switch c {
+            case .quando:
+                SceltaGiorno(titolo: "Quando", conOra: true) { g, o in quando = .data(g, o) }
+            case .scadenza:
+                SceltaGiorno(titolo: "Scadenza", conOra: false) { g, _ in scadenza = g }
+            case .promemoria:
+                SceltaGiorno(titolo: "Promemoria", conOra: true, oraObbligata: true) { g, o in alle.append(Tempo.istante(g, o)) }
+            }
+        }
+    }
+
+    private func gettone(_ t: String, _ icona: String, acceso: Bool, colore: Color = .accentoLife) -> some View {
+        HStack(spacing: 5) {
+            Image(systemName: icona).font(.footnote.weight(.semibold))
+            Text(t).font(.subheadline.weight(.medium)).lineLimit(1)
+        }
+        .padding(.horizontal, 12)
+        .frame(height: 34)
+        .foregroundStyle(acceso ? colore : Color.primary)
+        .background(acceso ? colore.opacity(0.16) : Color(uiColor: .tertiarySystemFill), in: Capsule())
+        .contentShape(Capsule())
+    }
+
+    private func spunta(_ t: String, _ icona: String? = nil, attiva: Bool, _ fai: @escaping () -> Void) -> some View {
+        Button(action: fai) {
+            if attiva {
+                Label(t, systemImage: "checkmark")
+            } else if let icona {
+                Label(t, systemImage: icona)
+            } else {
+                Text(t)
+            }
+        }
+    }
+
+    // MARK: Quando
+
+    private func dettoQuando(_ p: J) -> (etichetta: String, ora: String?)? {
+        if let q = quando {
+            switch q {
+            case .oggi: return ("Oggi", p.time.str)
+            case .sera: return ("Questa sera", p.time.str)
+            case .unGiorno: return ("Un giorno", nil)
+            case .nessuno: return nil
+            case .data(let g, let o): return (Tempo.etichetta(g) + (o.map { " \($0)" } ?? ""), o)
+            }
+        }
+        if let g = p.date.str {
+            return (Tempo.etichetta(g) + (p.time.str.map { " \($0)" } ?? ""), p.time.str)
+        }
+        if contesto["someday"]?.vero == true { return ("Un giorno", nil) }
+        if let d = contesto["due_at"]?.str, let g = Tempo.dataRoma(d) {
+            let ora = contesto["due_has_time"]?.vero == true ? Tempo.oraRoma(d) : nil
+            return (contesto["evening"]?.vero == true ? "Questa sera" : g == Tempo.oggi() ? "Oggi" : Tempo.etichetta(g), ora)
+        }
+        return nil
+    }
+
+    private func menuQuando(_ p: J) -> some View {
+        let detto = dettoQuando(p)
+        return Menu {
+            Button { quando = .oggi } label: { Label("Oggi", systemImage: "star.fill") }
+            Button { quando = .sera } label: { Label("Questa sera", systemImage: "moon.fill") }
+            Button { quando = .data(Tempo.piuGiorni(Tempo.oggi(), 1), nil) } label: { Label("Domani", systemImage: "sunrise.fill") }
+            Button { quando = .unGiorno } label: { Label("Un giorno", systemImage: "archivebox.fill") }
+            Button { calendario = .quando } label: { Label("Scegli data e ora…", systemImage: "calendar") }
+            if detto != nil {
+                Button(role: .destructive) { quando = .nessuno } label: { Label("Togli la data", systemImage: "xmark.circle") }
+            }
+        } label: {
+            gettone(detto?.etichetta ?? "Quando", "calendar", acceso: detto != nil)
+        }
+    }
+
+    // MARK: Scadenza
+
+    private var menuScadenza: some View {
+        Menu {
+            Button("Oggi") { scadenza = Tempo.oggi() }
+            Button("Domani") { scadenza = Tempo.piuGiorni(Tempo.oggi(), 1) }
+            Button("Tra una settimana") { scadenza = Tempo.piuGiorni(Tempo.oggi(), 7) }
+            Button { calendario = .scadenza } label: { Label("Scegli la data…", systemImage: "calendar") }
+            if scadenza != nil {
+                Button(role: .destructive) { scadenza = nil } label: { Label("Togli la scadenza", systemImage: "xmark.circle") }
+            }
+        } label: {
+            gettone(scadenza.map(Tempo.etichetta) ?? "Scadenza", "flag", acceso: scadenza != nil, colore: .pericoloLife)
+        }
+    }
+
+    // MARK: Priorità
+
+    private func menuPriorita(_ p: J) -> some View {
+        let valore = priorita ?? p.priority.int ?? contesto["priority"]?.int ?? 4
+        let nomi = [1: "Alta", 2: "Media", 3: "Bassa"]
+        let colore: Color = valore == 1 ? Color(hex: "#FF453A") : valore == 2 ? Color(hex: "#FF9F0A") : .accentoLife
+        return Menu {
+            ForEach([(1, "Alta"), (2, "Media"), (3, "Bassa"), (4, "Nessuna")], id: \.0) { o in
+                spunta(o.1, attiva: valore == o.0) { priorita = o.0 }
+            }
+        } label: {
+            gettone(nomi[valore] ?? "Priorità", valore < 4 ? "flag.fill" : "exclamationmark.circle", acceso: valore < 4, colore: colore)
+        }
+    }
+
+    // MARK: Lista
+
+    private func menuLista(_ p: J) -> some View {
+        let dalTesto = p.projectFound.vero ? Azioni.progetti.first(where: { $0.name.t == p.project.t })?.id.str : nil
+        let scelta = lista?.progetto ?? dalTesto ?? contesto["project_id"]?.str
+        let progetto = scelta.flatMap { id in Azioni.progetti.first { $0.id.t == id } }
+        let inEntrata = progetto == nil || progetto?.is_inbox.vero == true
+        return Menu {
+            ForEach(Azioni.progetti, id: \.id) { x in
+                let nome = x.is_inbox.vero ? "In entrata" : x.name.t
+                let intestazioni = Azioni.intestazioni(x.id.t).filter { $0.archived_at.isNull }
+                if intestazioni.isEmpty {
+                    spunta(nome, attiva: scelta == x.id.t) { lista = (x.id.t, nil) }
+                } else {
+                    Menu(nome) {
+                        spunta(nome, attiva: scelta == x.id.t && lista?.intestazione == nil) { lista = (x.id.t, nil) }
+                        ForEach(intestazioni, id: \.id) { h in
+                            spunta(h.title.t, attiva: lista?.intestazione == h.id.t) { lista = (x.id.t, h.id.t) }
+                        }
+                    }
+                }
+            }
+        } label: {
+            gettone(inEntrata ? "In entrata" : progetto?.name.t ?? "Lista", inEntrata ? "tray" : "folder", acceso: !inEntrata)
+        }
+    }
+
+    // MARK: Tag
+
+    private var menuEtichette: some View {
+        let note = Set(Azioni.tasks.flatMap { $0.tags.list.map(\.t) }).union(etichette).sorted()
+        return Menu {
+            Button {
+                Domanda.chiedi(titolo: "Nuovo tag", conferma: "Aggiungi") { v in
+                    if !v.isEmpty, !etichette.contains(v) { etichette.append(v) }
+                }
+            } label: { Label("Nuovo tag…", systemImage: "plus") }
+            ForEach(note, id: \.self) { n in
+                spunta(n, attiva: etichette.contains(n)) {
+                    if let i = etichette.firstIndex(of: n) { etichette.remove(at: i) } else { etichette.append(n) }
+                }
+            }
+        } label: {
+            gettone(etichette.isEmpty ? "Tag" : etichette.count == 1 ? etichette[0] : "\(etichette.count) tag", "tag", acceso: !etichette.isEmpty)
+        }
+    }
+
+    // MARK: Ripeti
+
+    private func regolaDi(_ frase: String) -> String? {
+        Logica.s.chiama("parser.parseTask", .str(frase), [:]).rrule.str
+    }
+
+    private func menuRipeti(_ p: J) -> some View {
+        let attuale = regola ?? p.rrule.str
+        return Menu {
+            ForEach(["Ogni giorno", "Ogni settimana", "Ogni mese", "Ogni anno"], id: \.self) { f in
+                spunta(f, attiva: attuale != nil && attuale == regolaDi(f.lowercased())) { regola = regolaDi(f.lowercased()) }
+            }
+            Button {
+                Domanda.chiedi(titolo: "Ogni quanto?", valore: "ogni 2 settimane") { v in
+                    guard !v.isEmpty else { return }
+                    regola = regolaDi(v.hasPrefix("ogni") || v.hasPrefix("tutti") ? v : "ogni \(v)")
+                }
+            } label: { Label("Personalizza…", systemImage: "slider.horizontal.3") }
+            if regola != nil {
+                Button(role: .destructive) { regola = nil } label: { Label("Non si ripete", systemImage: "xmark.circle") }
+            }
+        } label: {
+            gettone(attuale.map { Logica.s.chiama("ricorrenze.describeRrule", .str($0)).t.maiuscola } ?? "Ripeti", "repeat", acceso: attuale != nil)
+        }
+    }
+
+    // MARK: Promemoria
+
+    private func menuPromemoria(_ p: J) -> some View {
+        let haOra = dettoQuando(p)?.ora != nil
+        let quanti = (haOra ? minutiPrima.count : 0) + alle.count
+        return Menu {
+            if haOra {
+                ForEach([(0, "All'ora del task"), (10, "10 minuti prima"), (30, "30 minuti prima"), (60, "1 ora prima"), (1440, "1 giorno prima")], id: \.0) { o in
+                    spunta(o.1, attiva: minutiPrima.contains(o.0)) {
+                        if minutiPrima.contains(o.0) { minutiPrima.remove(o.0) } else { minutiPrima.insert(o.0) }
+                    }
+                }
+            }
+            Button { calendario = .promemoria } label: { Label("Scegli data e ora…", systemImage: "calendar.badge.clock") }
+            if !alle.isEmpty {
+                Button(role: .destructive) { alle = [] } label: { Label("Togli quelli a un'ora precisa", systemImage: "xmark.circle") }
+            }
+        } label: {
+            gettone(quanti == 0 ? "Promemoria" : "Promemoria · \(quanti)", "bell", acceso: quanti > 0)
+        }
+    }
+
+    // MARK: Checklist
+
+    private var checklist: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(voci, id: \.id) { v in
+                HStack(spacing: 8) {
+                    Image(systemName: "circle").foregroundStyle(Color.terziarioLife)
+                    TextField("Elemento", text: Binding(
+                        get: { v.title.t },
+                        set: { nuovo in voci = voci.map { x in
+                            guard x.id == v.id else { return x }
+                            var c = x
+                            c["title"] = .str(nuovo)
+                            return c
+                        } }
+                    ))
+                    .font(.subheadline)
+                    .focused($fuoco, equals: .voce(v.id.t))
+                    .submitLabel(.next)
+                    .onSubmit(aggiungiVoce)
+                    Button {
+                        voci.removeAll { $0.id == v.id }
+                        fuoco = .titolo
+                    } label: {
+                        Image(systemName: "xmark").font(.caption.weight(.semibold)).foregroundStyle(Color.secondarioLife).frame(width: 28, height: 28)
+                    }
+                    .accessibilityLabel("Togli")
+                }
+            }
+        }
+    }
+
+    private func aggiungiVoce() {
+        let id = Azioni.nuovoId()
+        voci.append(["id": .str(id), "title": "", "done": false])
+        fuoco = .voce(id)
+    }
+
+    // MARK: Aggiungi
+
+    private func salva() {
+        guard !vuoto else { return }
+        tocco()
+        let p = capito
+        var scelte: [String: J] = [:]
+        if let quando {
+            scelte["evening"] = false
+            scelte["someday"] = false
+            switch quando {
+            case .oggi, .sera:
+                let (d, h) = Azioni.scadenza(Tempo.oggi(), p.time.str)
+                scelte["due_at"] = d
+                scelte["due_has_time"] = .bool(h)
+                if case .sera = quando { scelte["evening"] = true }
+            case .unGiorno:
+                scelte["due_at"] = J.null
+                scelte["due_has_time"] = false
+                scelte["someday"] = true
+            case .nessuno:
+                scelte["due_at"] = J.null
+                scelte["due_has_time"] = false
+            case .data(let g, let o):
+                let (d, h) = Azioni.scadenza(g, o)
+                scelte["due_at"] = d
+                scelte["due_has_time"] = .bool(h)
+            }
+        }
+        if let scadenza { scelte["deadline"] = .str(scadenza) }
+        if let priorita { scelte["priority"] = .n(priorita) }
+        if let lista {
+            scelte["project_id"] = .str(lista.progetto)
+            scelte["heading_id"] = .opz(lista.intestazione)
+        }
+        if !etichette.isEmpty { scelte["tags"] = .arr(etichette.map { .str($0) }) }
+        if let regola { scelte["rrule"] = .str(regola) }
+        let n = note.trimmingCharacters(in: .whitespacesAndNewlines)
+        if conNote, !n.isEmpty { scelte["notes"] = .str(n) }
+        let piene = voci.filter { !$0.title.t.trimmingCharacters(in: .whitespaces).isEmpty }
+        if !piene.isEmpty { scelte["checklist"] = .arr(piene) }
+
+        let conOra = dettoQuando(p)?.ora != nil
+        let scelti = conOra ? minutiPrima : []
+        let t = Azioni.creaTask(testo: testo, contesto: contesto, scelte: scelte, promemoriaAuto: scelti.isEmpty)
+        if let t {
+            for m in scelti.sorted() { Azioni.aggiungiPromemoria(t, minutiPrima: m) }
+            for d in alle { Azioni.aggiungiPromemoria(t, alle: d) }
+            if !scelti.isEmpty || !alle.isEmpty { Notifiche.s.chiediPermesso() }
+        }
+        chiudi()
+    }
+}
+
+/// I gettoni vanno a capo: si vedono tutti, senza scorrere.
+private struct FlussoGettoni: Layout {
+    var spazio: CGFloat
+
+    private func righe(_ sotto: Subviews, _ larghezza: CGFloat) -> [(indici: [Int], altezza: CGFloat)] {
+        var out: [(indici: [Int], altezza: CGFloat)] = []
+        var x: CGFloat = 0
+        for (i, s) in sotto.enumerated() {
+            let m = s.sizeThatFits(.unspecified)
+            if out.isEmpty || x + m.width > larghezza {
+                out.append(([], 0))
+                x = 0
+            }
+            out[out.count - 1].indici.append(i)
+            out[out.count - 1].altezza = max(out[out.count - 1].altezza, m.height)
+            x += m.width + spazio
+        }
+        return out
+    }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let larghezza = proposal.width ?? 340
+        let r = righe(subviews, larghezza)
+        return CGSize(width: larghezza, height: r.map(\.altezza).reduce(0, +) + spazio * CGFloat(max(0, r.count - 1)))
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        var y = bounds.minY
+        for riga in righe(subviews, bounds.width) {
+            var x = bounds.minX
+            for i in riga.indici {
+                let m = subviews[i].sizeThatFits(.unspecified)
+                subviews[i].place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(m))
+                x += m.width + spazio
+            }
+            y += riga.altezza + spazio
+        }
+    }
+}
+
+/// Un giorno dal calendario, con l'ora se serve.
+private struct SceltaGiorno: View {
+    let titolo: String
+    let conOra: Bool
+    var oraObbligata = false
+    let fatto: (String, String?) -> Void
+    @State private var giorno = Date()
+    @State private var ora = Date()
+    @State private var aOra = false
+    @Environment(\.dismiss) private var chiudi
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                DatePicker(titolo, selection: $giorno, displayedComponents: .date).datePickerStyle(.graphical)
+                if conOra {
+                    if !oraObbligata { Toggle("A un'ora precisa", isOn: $aOra) }
+                    if aOra || oraObbligata { DatePicker("Ora", selection: $ora, displayedComponents: .hourAndMinute) }
+                }
+            }
+            .navigationTitle(titolo)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Annulla") { chiudi() } }
-                ToolbarItem(placement: .confirmationAction) { Button("Aggiungi", action: salva).fontWeight(.semibold).disabled(testo.trimmingCharacters(in: .whitespaces).isEmpty) }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Fatto") {
+                        fatto(Tempo.dataRoma(giorno), aOra || oraObbligata ? Tempo.oraRoma(ora) : nil)
+                        chiudi()
+                    }
+                    .fontWeight(.semibold)
+                }
             }
         }
-        .presentationDetents([.medium])
-        .onAppear { fuoco = true }
-    }
-
-    private func salva() {
-        Azioni.creaTask(testo: testo, contesto: contesto)
-        chiudi()
+        .environment(\.timeZone, Tempo.roma)
+        .presentationDetents([.large])
     }
 }
 
