@@ -369,6 +369,16 @@ final class Logica: ObservableObject {
     /// Il primo giro, appena la prima schermata è in piedi.
     func preparaLetture() { riscalda(tutte: true) }
 
+    /// Per le funzioni che rispondono con una promessa.
+    func chiamaAsync(_ percorso: String, _ argomenti: J...) async -> J {
+        await withCheckedContinuation { (c: CheckedContinuation<J, Never>) in
+            let fatto: @convention(block) (String) -> Void = { testo in
+                c.resume(returning: J.parse(testo).ok)
+            }
+            contesto.objectForKeyedSubscript("__chiamaAsync")?.call(withArguments: [percorso, J.arr(argomenti).testoJSON, unsafeBitCast(fatto, to: AnyObject.self)])
+        }
+    }
+
     func avvia() {
         avviata = true
         contesto.objectForKeyedSubscript("__avvia")?.call(withArguments: [])
