@@ -14,7 +14,7 @@ jobs:
           let voci = ["app-todo": "checkmark.square.fill", "app-calendario": "calendar", "app-finanze": "eurosign.circle.fill", "app-abitudini": "checkmark.seal.fill", "app-training": "figure.run", "app-mobilita": "figure.flexibility", "app-pasti": "fork.knife"]
           let lato = 168
           for (nome, simbolo) in voci {
-              let conf = NSImage.SymbolConfiguration(pointSize: CGFloat(lato) / 1.2, weight: .medium)
+              let conf = NSImage.SymbolConfiguration(pointSize: CGFloat(lato) / 1.5, weight: .medium)
               guard let base = NSImage(systemSymbolName: simbolo, accessibilityDescription: nil)?.withSymbolConfiguration(conf) else { fatalError(simbolo) }
               let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: lato, pixelsHigh: lato, bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
               NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
