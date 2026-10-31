@@ -86,7 +86,7 @@ jobs:
                 "date": "$OGGI",
                 "downloadURL": "$URL",
                 "size": $DIMENSIONE,
-                "minOSVersion": "17.0"
+                "minOSVersion": "26.1"
               }]
             }]
           }

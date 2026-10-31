@@ -82,6 +82,7 @@ struct RigaEventoWidget: View {
                 Spacer(minLength: 0)
             }
         }
+        .buttonStyle(.plain)
     }
     private var sotto: String {
         let orario = e.inizio.map { "\($0) – \(e.fine ?? "")" } ?? "tutto il giorno"
@@ -107,6 +108,7 @@ struct RigaTaskWidget: View {
                     if let o = t.ora { Text(o).font(.system(size: misura - 2, weight: .medium)).monospacedDigit().foregroundStyle(.secondary) }
                 }
             }
+            .buttonStyle(.plain)
         }
     }
     private var cerchio: some View {

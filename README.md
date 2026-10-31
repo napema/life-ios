@@ -22,6 +22,15 @@ Indirizzi:
 - IPA: `https://github.com/napema/life-ios/releases/download/ultima/Life.ipa`
 - Sorgente per SideStore: `https://github.com/napema/life-ios/releases/download/ultima/sorgente.json`
 
+Se iloader chiede come trattare le estensioni, scegli la registrazione separata (App ID propri): serve ai widget.
+Se l'installazione con i widget fallisce, usa `Life-senza-widget.ipa` dalla stessa release.
+
+## Widget
+
+Tieni premuto sulla Home o sulla schermata di blocco e cerca Life. Sulla Home i cerchietti completano il
+task senza aprire l'app e ogni riga apre proprio quel task o quell'evento; sulla schermata di blocco il
+tocco apre Life sulla cosa mostrata. Dopo l'installazione apri Life una volta: è lì che i widget si collegano.
+
 ## Rinnovo ogni 7 giorni
 
 SideStore rinnova da solo in background, se **LocalDevVPN è accesa** e c'è il Wi-Fi. Se salta, apri
