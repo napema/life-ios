@@ -1550,8 +1550,12 @@ struct ImpostazioniTraining: View {
                     if catalogo > 0 { RigaFin(titolo: "Catalogo in memoria", valore: "\(catalogo) esercizi") }
                     Button(provo ? "Provo…" : "Prova la chiave", action: prova).disabled(chiave.isEmpty || provo)
                 }
+                .onAppear {
+                    // Su un dispositivo nuovo la chiave può arrivare dall'account un attimo dopo
+                    if chiave.isEmpty { chiave = Logica.s.chiama("allenamenti.hevy.chiave").t }
+                }
             }
-            Text("Hevy → Settings → Developer → Generate API Key (serve Pro). Resta su questo dispositivo e non viene sincronizzata.").font(.caption).foregroundStyle(Color.secondarioLife)
+            Text("Hevy → Settings → Developer → Generate API Key (serve Pro). Si salva nel tuo account: basta scriverla una volta.").font(.caption).foregroundStyle(Color.secondarioLife)
             Sezione("Il blocco") {
                 Carta(padding: 12) {
                     RigaFin(titolo: "Obiettivo", valore: "\(ob.nome.t) · \(ob.passo.t)")
@@ -1573,11 +1577,17 @@ struct ImpostazioniTraining: View {
         tra("hevy.scriviChiave", .str(chiave))
         provo = true
         Task { @MainActor in
-            _ = await Logica.s.chiamaAsync("allenamenti.hevy.provaChiave")
-            let el = await Logica.s.chiamaAsync("allenamenti.hevy.scaricaEsercizi", ["forza": true]).list
+            let (_, errore) = await Logica.s.chiamaAsyncConErrore("allenamenti.hevy.provaChiave")
+            if let errore {
+                provo = false
+                avviso(errore, errore: true)
+                return
+            }
+            let (risposta, errore2) = await Logica.s.chiamaAsyncConErrore("allenamenti.hevy.scaricaEsercizi", ["forza": true])
+            let el = risposta.list
             catalogo = el.count
             provo = false
-            avviso(el.isEmpty ? "Hevy non risponde: controlla la chiave." : "Funziona. \(el.count) esercizi nel catalogo.", errore: el.isEmpty)
+            avviso(errore2 ?? "Funziona. \(el.count) esercizi nel catalogo.", errore: errore2 != nil)
         }
     }
 }

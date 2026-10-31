@@ -379,6 +379,17 @@ final class Logica: ObservableObject {
         }
     }
 
+    /// Come `chiamaAsync`, ma dice anche cosa è andato storto.
+    func chiamaAsyncConErrore(_ percorso: String, _ argomenti: J...) async -> (J, String?) {
+        await withCheckedContinuation { (c: CheckedContinuation<(J, String?), Never>) in
+            let fatto: @convention(block) (String) -> Void = { testo in
+                let r = J.parse(testo)
+                c.resume(returning: (r.ok, r.errore.str))
+            }
+            contesto.objectForKeyedSubscript("__chiamaAsync")?.call(withArguments: [percorso, J.arr(argomenti).testoJSON, unsafeBitCast(fatto, to: AnyObject.self)])
+        }
+    }
+
     func avvia() {
         avviata = true
         contesto.objectForKeyedSubscript("__avvia")?.call(withArguments: [])
@@ -524,7 +535,8 @@ final class Logica: ObservableObject {
             Task { @MainActor in
                 do {
                     // Il token può essere appena scaduto: lo si rinnova prima di partire
-                    if Rete.s.connesso, let t = try? await Rete.s.token() { q.setValue("Bearer \(t)", forHTTPHeaderField: "Authorization") }
+                    // Solo verso Supabase: agli altri servizi il nostro token non va mai mandato
+                    if u.host == URL(string: Config.supabaseUrl)?.host, Rete.s.connesso, let t = try? await Rete.s.token() { q.setValue("Bearer \(t)", forHTTPHeaderField: "Authorization") }
                     let (d, r) = try await URLSession.shared.data(for: q)
                     fatto.call(withArguments: [(r as? HTTPURLResponse)?.statusCode ?? 0, String(decoding: d, as: UTF8.self), NSNull()])
                 } catch {
