@@ -45,27 +45,23 @@ enum FotoMobilita {
 }
 
 struct VistaMobilita: View {
+    init(scheda: String) { self.scheda = scheda }
+
     @ObservedObject private var logica = Logica.s
-    @State private var scheda = "oggi"
+    let scheda: String
     @State private var player: IdTesto?
     @State private var assessment = false
 
     var body: some View {
         let _ = logica.versione
         return Pagina {
-            Picker("Scheda", selection: $scheda) {
-                Text("Oggi").tag("oggi")
-                Text("Progressi").tag("progressi")
-                Text("Altro").tag("altro")
-            }
-            .pickerStyle(.segmented)
             switch scheda {
             case "progressi": progressi
             case "altro": altro
             default: oggi
             }
         }
-        .navigationTitle("Mobilità")
+        .navigationTitle(scheda == "progressi" ? "Progressi" : scheda == "altro" ? "Altro" : "Mobilità")
         .fullScreenCover(item: $player) { p in PlayerMobilita(tipo: p.id) }
         .sheet(isPresented: $assessment) { Assessment() }
     }

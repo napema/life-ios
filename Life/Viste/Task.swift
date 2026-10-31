@@ -204,8 +204,7 @@ struct ListaTask: View {
                         .font(.title2.weight(.semibold))
                         .foregroundStyle(.white)
                         .frame(width: 56, height: 56)
-                        .background(Color.accentoLife, in: Circle())
-                        .shadow(color: .black.opacity(0.2), radius: 8, y: 4)
+                        .glassEffect(.regular.tint(Color.accentoLife).interactive(), in: .circle)
                 }
                 .padding(.trailing, 18)
                 .padding(.bottom, 16)

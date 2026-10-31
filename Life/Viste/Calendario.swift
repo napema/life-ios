@@ -110,10 +110,20 @@ struct NuovoEventoBersaglio: Identifiable {
     var tuttoIlGiorno = false
 }
 
+/// Il giorno che stai guardando resta lo stesso quando cambi vista dalla barra.
+final class StatoCalendario: ObservableObject {
+    static let s = StatoCalendario()
+    @Published var ancora: String?
+}
+
 struct VistaCalendario: View {
     @ObservedObject private var archivio = Archivio.s
     @ObservedObject private var preferenze = Preferenze.s
-    @State private var ancora: String?
+    @ObservedObject private var stato = StatoCalendario.s
+    private var ancora: String? {
+        get { stato.ancora }
+        nonmutating set { stato.ancora = newValue }
+    }
     @State private var aperto: EventoAperto?
     @State private var taskAperto: TaskAperto?
     @State private var editor: NuovoEventoBersaglio?
@@ -130,15 +140,6 @@ struct VistaCalendario: View {
     var body: some View {
         let _ = archivio.versione
         VStack(spacing: 0) {
-            Picker("Vista", selection: $preferenze.modoCalendario) {
-                Text("Giorno").tag("day")
-                Text("3 giorni").tag("three")
-                Text("Settimana").tag("week")
-                Text("Mese").tag("month")
-            }
-            .pickerStyle(.segmented)
-            .padding(.horizontal, 16)
-            .padding(.bottom, 8)
             if modo == "month" {
                 mese
             } else {

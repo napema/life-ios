@@ -138,9 +138,11 @@ struct Blocco<Contenuto: View>: View {
 // MARK: - La schermata
 
 struct VistaFinanze: View {
+    init(scheda: String) { self.scheda = scheda }
+
     @ObservedObject private var logica = Logica.s
     @ObservedObject private var fogli = Fogli.s
-    @State private var scheda = "home"
+    let scheda: String
     @State private var ciclo = ""
     @State private var filtro = "tutti"
 
@@ -149,13 +151,6 @@ struct VistaFinanze: View {
     var body: some View {
         let _ = logica.versione
         return Pagina {
-            Picker("Scheda", selection: $scheda) {
-                Text("Riepilogo").tag("home")
-                Text("Movimenti").tag("movimenti")
-                Text("Analisi").tag("analisi")
-                Text("Altro").tag("altro")
-            }
-            .pickerStyle(.segmented)
 
             if scheda == "movimenti" || scheda == "analisi" { selettoreCiclo }
 
@@ -176,20 +171,15 @@ struct VistaFinanze: View {
             default:
                 Riepilogo()
             }
-            Color.clear.frame(height: 70)
         }
-        .navigationTitle("Finanze")
+        .navigationTitle(scheda == "movimenti" ? "Movimenti" : scheda == "analisi" ? "Analisi" : scheda == "altro" ? "Altro" : "Finanze")
         .toolbar {
             Button { fogli.apri(.pocket) } label: { Image(systemName: "wallet.pass") }
-        }
-        .safeAreaInset(edge: .bottom) {
-            if scheda != "altro" { barraGesti }
         }
         .onAppear {
             fin("dati.migra")
             if ciclo.isEmpty { ciclo = fin("calcolo.cicloDi").indice.t }
         }
-        .sheet(item: $fogli.aperto) { f in FoglioFinanzeVista(foglio: f) }
     }
 
     private var cicloCorrente: String { ciclo.isEmpty ? fin("calcolo.cicloDi").indice.t : ciclo }
@@ -212,31 +202,6 @@ struct VistaFinanze: View {
                 .disabled(cicloCorrente >= ora)
         }
         .tint(accentoFinanze)
-    }
-
-    /// I due gesti di tutti i giorni, a portata di pollice.
-    private var barraGesti: some View {
-        HStack(spacing: 8) {
-            Button { fogli.apri(.movimento(nil, "out", nil)) } label: {
-                Label("Uscita", systemImage: "minus").font(.subheadline.weight(.semibold)).padding(.horizontal, 14).frame(height: 44).foregroundStyle(.white).background(accentoFinanze, in: Capsule())
-            }
-            Button { fogli.apri(.movimento(nil, "in", nil)) } label: {
-                Label("Entrata", systemImage: "plus").font(.subheadline.weight(.semibold)).padding(.horizontal, 12).frame(height: 44).background(Color(uiColor: .tertiarySystemFill), in: Capsule())
-            }
-            bottoneTondo("calendar") { fogli.apri(.previsto) }
-            bottoneTondo("clock") { fogli.apri(.lista) }
-            bottoneTondo("arrow.left.arrow.right") { fogli.apri(.movimento(nil, "giro", nil)) }
-        }
-        .buttonStyle(.plain)
-        .padding(6)
-        .background(.regularMaterial, in: Capsule())
-        .padding(.bottom, 8)
-    }
-
-    private func bottoneTondo(_ icona: String, _ azione: @escaping () -> Void) -> some View {
-        Button(action: { tocco(); azione() }) {
-            Image(systemName: icona).frame(width: 44, height: 44).background(Color(uiColor: .tertiarySystemFill), in: Circle())
-        }
     }
 }
 

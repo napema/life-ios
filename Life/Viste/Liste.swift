@@ -213,7 +213,6 @@ struct VistaListe: View {
                 }
                 Section {
                     NavigationLink { VistaCestino() } label: { Label("Cestino", systemImage: "trash").foregroundStyle(Color.primary) }
-                    NavigationLink { VistaImpostazioni() } label: { Label("Impostazioni", systemImage: "gearshape").foregroundStyle(Color.primary) }
                 } footer: {
                     Text(statoSync).frame(maxWidth: .infinity, alignment: .center).padding(.top, 8)
                 }

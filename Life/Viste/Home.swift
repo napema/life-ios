@@ -1,9 +1,9 @@
 import SwiftUI
 
-/// La prima schermata: le app, «adesso» e la giornata in un colpo d'occhio (come Launcher.tsx).
+/// La scheda «Oggi» di Life: adesso, la giornata e un colpo d'occhio su ogni mini-app.
 struct Home: View {
-    let apriModulo: (Modulo) -> Void
-    let cambiaScheda: (String) -> Void
+    private func apriModulo(_ m: Modulo) { Instradatore.s.apri(m) }
+    private func cambiaScheda(_ s: String) { Instradatore.s.apri(s == "calendario" ? .calendario : .todo) }
     @ObservedObject private var archivio = Archivio.s
     @ObservedObject private var logica = Logica.s
     @State private var ora = Date()
@@ -73,13 +73,6 @@ struct Home: View {
 
         return ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(dataLunga(oggi)).font(.subheadline).foregroundStyle(Color.secondarioLife)
-                    Text("\(logica.chiama("home.saluto", .n(Calendar.current.component(.hour, from: ora))).t)").font(.largeTitle.bold())
-                }
-
-                griglieApp
-
                 adesso(q, prossima, oraMin)
 
                 widgetAgenda(restano, passate: passate, totale: agenda.count)
@@ -100,7 +93,9 @@ struct Home: View {
             .padding(.bottom, 30)
         }
         .background(Color.sfondoLife)
-        .toolbar(.hidden, for: .navigationBar)
+        .navigationTitle(logica.chiama("home.saluto", .n(Calendar.current.component(.hour, from: ora))).t)
+        .navigationSubtitle(dataLunga(oggi))
+        .toolbar { BottoneImpostazioni() }
         .sheet(item: $taskAperto) { a in SchedaTask(idTask: a.task.id.t) }
         .onReceive(Timer.publish(every: 30, on: .main, in: .common).autoconnect()) { ora = $0 }
     }
@@ -108,36 +103,6 @@ struct Home: View {
     private func dataLunga(_ g: String) -> String {
         let (_, m, d) = Tempo.parti(g)
         return "\(Tempo.settimanaLunga[Tempo.giornoSettimana(g)].maiuscola) \(d) \(Tempo.mesiLunghi[m - 1].lowercased())"
-    }
-
-    // MARK: Le app
-
-    private var griglieApp: some View {
-        let colonne = Array(repeating: GridItem(.flexible()), count: 4)
-        return LazyVGrid(columns: colonne, spacing: 16) {
-            tessera("To do", "checkmark.square.fill", "#34C759") { cambiaScheda("oggi") }
-            tessera("Calendar", "calendar", "#FF453A") { cambiaScheda("calendario") }
-            ForEach(Modulo.tutti) { m in
-                tessera(m.nome, m.icona, m.colore) { apriModulo(m) }
-            }
-        }
-    }
-
-    private func tessera(_ nome: String, _ icona: String, _ colore: String, _ azione: @escaping () -> Void) -> some View {
-        Button {
-            tocco()
-            azione()
-        } label: {
-            VStack(spacing: 6) {
-                Image(systemName: icona)
-                    .font(.system(size: 26, weight: .medium))
-                    .foregroundStyle(Color(hex: colore))
-                    .frame(width: 60, height: 60)
-                    .background(Color(hex: colore).opacity(0.14), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                Text(nome).font(.caption.weight(.medium)).foregroundStyle(Color.primary).lineLimit(1)
-            }
-        }
-        .buttonStyle(.plain)
     }
 
     // MARK: Adesso
@@ -204,7 +169,7 @@ struct Home: View {
     private func widgetAgenda(_ restano: [VoceAgenda], passate: Int, totale: Int) -> some View {
         Carta {
             Button { cambiaScheda("calendario") } label: {
-                testata("Calendar", "calendar", "#FF453A", destra: passate > 0 ? "\(passate) già passate" : "")
+                testata("Calendario", "calendar", "#FF453A", destra: passate > 0 ? "\(passate) già passate" : "")
             }
             .buttonStyle(.plain)
             Text(restano.isEmpty ? "Oggi" : "\(restano.count) \(restano.count == 1 ? "cosa" : "cose") oggi").font(.title3.weight(.semibold))

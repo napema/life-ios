@@ -94,6 +94,7 @@ final class Rete: ObservableObject {
     }
 
     func esci() {
+        ClienteWidget.collega(indirizzo: nil)
         sessione = nil
         Self.scriviPortachiavi(nil)
     }

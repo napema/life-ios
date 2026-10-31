@@ -46,7 +46,11 @@ struct Modulo: Identifiable, Hashable {
         Modulo(id: "mobilita", nome: "Mobilità", colore: "#30B0C7", icona: "figure.flexibility"),
         Modulo(id: "pasti", nome: "Pasti", colore: "#FF2D55", icona: "fork.knife"),
     ]
-    static func di(_ id: String) -> Modulo? { tutti.first { $0.id == id } }
+    static let todo = Modulo(id: "todo", nome: "To do", colore: "#34C759", icona: "checkmark.square.fill")
+    static let calendario = Modulo(id: "calendario", nome: "Calendario", colore: "#FF453A", icona: "calendar")
+    /// Tutte le mini-app di Life, con la stessa dignità.
+    static let app = [todo, calendario] + tutti
+    static func di(_ id: String) -> Modulo? { app.first { $0.id == id } }
 }
 
 /// Una carta con gli angoli stondati, come le liste raggruppate di iOS.

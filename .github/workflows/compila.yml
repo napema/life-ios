@@ -48,7 +48,10 @@ jobs:
           mkdir -p Payload
           cp -R build/Build/Products/Release-iphoneos/Life.app Payload/
           zip -qry Life.ipa Payload
-          ls -lh Life.ipa
+          # La riserva, se chi firma non accetta l'estensione dei widget
+          rm -rf Payload/Life.app/PlugIns
+          zip -qry Life-senza-widget.ipa Payload
+          ls -lh Life.ipa Life-senza-widget.ipa
 
       - name: Pubblica per SideStore
         if: github.ref == 'refs/heads/main'
@@ -89,10 +92,10 @@ jobs:
           }
           EOF
           if gh release view ultima > /dev/null 2>&1; then
-            gh release upload ultima Life.ipa sorgente.json --clobber
+            gh release upload ultima Life.ipa Life-senza-widget.ipa sorgente.json --clobber
             gh release edit ultima --title "Life (build $NUMERO)"
           else
-            gh release create ultima Life.ipa sorgente.json --title "Life (build $NUMERO)" --notes "Compilata da GitHub."
+            gh release create ultima Life.ipa Life-senza-widget.ipa sorgente.json --title "Life (build $NUMERO)" --notes "Compilata da GitHub."
           fi
 
       - name: Screenshot dal simulatore
@@ -107,11 +110,11 @@ jobs:
           xcrun simctl bootstatus "$SIM" -b
           xcrun simctl install "$SIM" build-sim/Build/Products/Debug-iphonesimulator/Life.app
           mkdir -p screenshot
-          for vista in login home oggi calendario programmate liste finanze abitudini training mobilita pasti impostazioni; do
+          for vista in login oggi app cerca widget todo todo:programmate todo:liste calendario finanze finanze:movimenti abitudini allenamenti mobilita pasti impostazioni; do
             xcrun simctl terminate "$SIM" it.life.app || true
             SIMCTL_CHILD_LIFE_DEMO=$vista xcrun simctl launch "$SIM" it.life.app
             sleep 7
-            xcrun simctl io "$SIM" screenshot "screenshot/$vista.png"
+            xcrun simctl io "$SIM" screenshot "screenshot/${vista/:/-}.png"
           done
           # Avvio vero, senza dati finti: deve arrivare all'accesso e restare aperta
           xcrun simctl terminate "$SIM" it.life.app || true
@@ -138,16 +141,16 @@ jobs:
           PY
           mkdir -p screenshot
           xcrun simctl terminate "$SIM" it.life.app || true
-          SIMCTL_CHILD_LIFE_DEMO=home SIMCTL_CHILD_LIFE_LOGICA_URL=file:///tmp/logica-buona.js xcrun simctl launch "$SIM" it.life.app
+          SIMCTL_CHILD_LIFE_DEMO=oggi SIMCTL_CHILD_LIFE_LOGICA_URL=file:///tmp/logica-buona.js xcrun simctl launch "$SIM" it.life.app
           sleep 8
           xcrun simctl io "$SIM" screenshot screenshot/agg-1-appena-arrivata.png
           xcrun simctl terminate "$SIM" it.life.app || true
-          SIMCTL_CHILD_LIFE_DEMO=home xcrun simctl launch "$SIM" it.life.app
+          SIMCTL_CHILD_LIFE_DEMO=oggi xcrun simctl launch "$SIM" it.life.app
           sleep 8
           xcrun simctl io "$SIM" screenshot screenshot/agg-2-dopo-riavvio.png
           # 2. Una logica rotta: va scartata, l'app resta aperta con quella buona
           xcrun simctl terminate "$SIM" it.life.app || true
-          SIMCTL_CHILD_LIFE_DEMO=home SIMCTL_CHILD_LIFE_LOGICA_URL=file:///tmp/logica-rotta.js xcrun simctl launch "$SIM" it.life.app
+          SIMCTL_CHILD_LIFE_DEMO=oggi SIMCTL_CHILD_LIFE_LOGICA_URL=file:///tmp/logica-rotta.js xcrun simctl launch "$SIM" it.life.app
           sleep 8
           xcrun simctl io "$SIM" screenshot screenshot/agg-3-logica-rotta.png
           xcrun simctl spawn "$SIM" launchctl list | grep -q "it.life.app"
@@ -162,7 +165,7 @@ jobs:
           open(sys.argv[1], 'w', encoding='utf-8').write(re.sub(r'versione=\d+', 'versione=1', t, count=1))
           PY
           xcrun simctl install "$SIM" "$APP"
-          SIMCTL_CHILD_LIFE_DEMO=home SIMCTL_CHILD_LIFE_LOGICA_URL=reale xcrun simctl launch "$SIM" it.life.app
+          SIMCTL_CHILD_LIFE_DEMO=oggi SIMCTL_CHILD_LIFE_LOGICA_URL=reale xcrun simctl launch "$SIM" it.life.app
           sleep 15
           xcrun simctl io "$SIM" screenshot screenshot/agg-4-da-github.png
           DATI=$(xcrun simctl get_app_container "$SIM" it.life.app data)

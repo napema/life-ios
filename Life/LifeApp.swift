@@ -1,5 +1,6 @@
 import BackgroundTasks
 import SwiftUI
+import WidgetKit
 
 @main
 struct LifeApp: App {
@@ -24,6 +25,9 @@ struct LifeApp: App {
                     Accesso()
                 }
             }
+            .onOpenURL { url in
+                if rete.connesso || demo != nil { Instradatore.s.apri(url: url) }
+            }
             .preferredColorScheme(preferenze.aspetto == "light" ? .light : preferenze.aspetto == "dark" ? .dark : nil)
             .tint(.accentoLife)
         }
@@ -36,6 +40,7 @@ struct LifeApp: App {
                 Archivio.s.avvia()
                 Notifiche.s.aggiornaPermesso()
                 Task { await AggiornaLogica.controlla() }
+                Task { await collegaWidget() }
             case .background:
                 Logica.s.visibile(false)
                 Archivio.s.ferma()
@@ -43,13 +48,21 @@ struct LifeApp: App {
                 Logica.s.salvaMemoriaOra()
                 Notifiche.s.riprogramma()
                 Notifiche.s.pianificaAttivita()
+                WidgetCenter.shared.reloadAllTimelines()
             default:
                 break
             }
         }
     }
 
+    /// I widget parlano da soli col server, all'indirizzo personale di questo account.
+    private func collegaWidget() async {
+        guard rete.connesso, let r = try? await Rete.s.righe("widget_chiave", "select=indirizzo", da: 0, a: 0).first else { return }
+        ClienteWidget.collega(indirizzo: r.indirizzo.str)
+    }
+
     private func avvia() {
+        Task { await collegaWidget() }
         if demo != nil { Dimostrazione.carica() }
         Logica.s.avvia()
         Archivio.s.avvia()
@@ -57,79 +70,71 @@ struct LifeApp: App {
     }
 }
 
-/// Le schede in basso, come MobileShell.tsx.
+/// Life è il contenitore: la sua barra porta alla giornata, alle app e alla ricerca.
+/// To do, Calendario e i moduli sono mini-app: ognuna si apre con la sua barra.
 struct Radice: View {
     var demo: String? = nil
     @ObservedObject private var archivio = Archivio.s
     @ObservedObject private var logica = Logica.s
-    @ObservedObject private var annulla = Annulla.s
     @ObservedObject private var notifiche = Notifiche.s
-    @State private var scheda = "home"
-    @State private var modulo: Modulo?
-    @State private var taskDaNotifica: J?
+    @ObservedObject private var instradatore = Instradatore.s
+    @Namespace private var zoom
+    @State private var scheda = "oggi"
     @State private var impostazioni = false
+    @State private var anteprimaWidget = false
 
     var body: some View {
-        let oggi = Tempo.oggi()
-        let inRitardo = Azioni.tasks.filter { Azioni.inOggi($0, oggi) && Azioni.inRitardo($0, oggi) }.count
+        let _ = archivio.versione
+        let _ = logica.versione
+        let adesso = cosaAdesso()
         TabView(selection: $scheda) {
-            NavigationStack { Home(apriModulo: { modulo = $0 }, cambiaScheda: { scheda = $0 }) }
-                .tabItem { Label("App", systemImage: "square.grid.2x2") }
-                .tag("home")
-            NavigationStack { VistaOggi() }
-                .tabItem { Label("Oggi", systemImage: "star.fill") }
-                .badge(inRitardo)
-                .tag("oggi")
-            NavigationStack { VistaCalendario() }
-                .tabItem { Label("Calendario", systemImage: "calendar") }
-                .tag("calendario")
-            NavigationStack { VistaProgrammate() }
-                .tabItem { Label("Programmate", systemImage: "calendar.badge.clock") }
-                .tag("programmate")
-            NavigationStack { VistaListe() }
-                .tabItem { Label("Liste", systemImage: "list.bullet") }
-                .tag("liste")
-        }
-        .overlay(alignment: .top) {
-            if let a = logica.avviso {
-                AvvisoBanner(avviso: a)
-                    .transition(.move(edge: .top).combined(with: .opacity))
-                    .padding(.top, 8)
+            Tab("Oggi", systemImage: "sun.max", value: "oggi") {
+                NavigationStack { Home() }
+            }
+            Tab("App", systemImage: "square.grid.2x2", value: "app") {
+                NavigationStack { GrigliaApp(zoom: zoom) }
+            }
+            Tab(value: "cerca", role: .search) {
+                NavigationStack { VistaCerca() }
             }
         }
-        .overlay(alignment: .bottom) {
-            if let e = annulla.etichetta {
-                HStack(spacing: 12) {
-                    Text(e).font(.subheadline).lineLimit(1)
-                    Spacer(minLength: 8)
-                    Button("Annulla") { annulla.esegui() }.font(.subheadline.weight(.semibold))
+        .tabBarMinimizeBehavior(.onScrollDown)
+        .tabViewBottomAccessory(isEnabled: adesso != nil) {
+            if let adesso {
+                Button {
+                    tocco()
+                    instradatore.apri(adesso.modulo)
+                } label: {
+                    HStack(spacing: 10) {
+                        Image(systemName: adesso.modulo.icona).foregroundStyle(Color(hex: adesso.modulo.colore))
+                        VStack(alignment: .leading, spacing: 0) {
+                            Text(adesso.titolo).font(.subheadline.weight(.semibold)).lineLimit(1)
+                            Text(adesso.sotto).font(.caption2).foregroundStyle(Color.secondarioLife).lineLimit(1)
+                        }
+                        Spacer(minLength: 0)
+                    }
+                    .padding(.horizontal, 16)
+                    .contentShape(Rectangle())
                 }
-                .padding(.horizontal, 16)
-                .frame(height: 46)
-                .background(.regularMaterial, in: Capsule())
-                .padding(.horizontal, 16)
-                .padding(.bottom, 62)
-                .transition(.move(edge: .bottom).combined(with: .opacity))
+                .buttonStyle(.plain)
             }
         }
-        .animation(.spring(duration: 0.3), value: annulla.etichetta)
-        .animation(.spring(duration: 0.3), value: logica.avviso)
-        .fullScreenCover(item: $modulo) { m in
-            VistaModulo(modulo: m)
-        }
-        .sheet(item: Binding(get: { taskDaNotifica.map { TaskAperto(task: $0) } }, set: { taskDaNotifica = $0?.task })) { a in
-            SchedaTask(idTask: a.task.id.t)
+        .modifier(StratoAvvisi())
+        .fullScreenCover(item: $instradatore.aperta) { a in
+            MiniApp(modulo: a.modulo)
+                .navigationTransition(.zoom(sourceID: a.idZoom, in: zoom))
         }
         .sheet(isPresented: $impostazioni) {
             NavigationStack { VistaImpostazioni() }
         }
+        .sheet(isPresented: $anteprimaWidget) { AnteprimaWidget() }
         .onChange(of: notifiche.daAprire) { _, apri in
             guard let apri else { return }
             notifiche.daAprire = nil
-            if apri.hasPrefix("task:"), let t = archivio.riga("tasks", String(apri.dropFirst(5))) {
-                taskDaNotifica = t
+            if apri.hasPrefix("task:") {
+                instradatore.apri(url: LinkLife.task(String(apri.dropFirst(5))))
             } else if apri.hasPrefix("evento:") {
-                scheda = "calendario"
+                instradatore.apri(.calendario)
             }
         }
         .onAppear(perform: applicaDemo)
@@ -141,14 +146,30 @@ struct Radice: View {
         .task { await AggiornaLogica.controlla() }
     }
 
+    /// Quello che conta adesso, sopra la barra: la cosa in ritardo o il prossimo evento di oggi.
+    private func cosaAdesso() -> (modulo: Modulo, titolo: String, sotto: String)? {
+        if let v = logica.chiama("home.quadro").prio.list.first, let m = Modulo.di(v.modulo.t) {
+            return (m, v.nome.t, v.quando.str == "tardi" ? "In ritardo · \(m.nome)" : "Adesso · \(m.nome)")
+        }
+        let (da, a) = Tempo.intervallo(Tempo.oggi())
+        let ora = Tempo.iso(Date())
+        guard let e = Azioni.eventi(da: da, a: a).first(where: { !$0.all_day.vero && $0.end_at.t > ora }) else { return nil }
+        return (.calendario, e.summary.t, "Alle \(Tempo.oraRoma(e.start_at.str) ?? "")")
+    }
+
     private func applicaDemo() {
         guard let demo else { return }
-        switch demo {
-        case "oggi", "calendario", "programmate", "liste", "home": scheda = demo
-        case "finanze", "abitudini", "mobilita", "pasti": modulo = Modulo.di(demo)
-        case "training": modulo = Modulo.di("allenamenti")
-        case "impostazioni": scheda = "liste"; impostazioni = true
-        default: break
+        let parti = demo.split(separator: ":").map(String.init)
+        let vista = parti.first ?? ""
+        instradatore.schedaIniziale = parti.count > 1 ? parti[1] : nil
+        switch vista {
+        case "app", "cerca", "oggi": scheda = vista
+        case "todo": instradatore.apri(.todo)
+        case "calendario": instradatore.apri(.calendario)
+        case "impostazioni": impostazioni = true
+        case "widget": anteprimaWidget = true
+        default:
+            if let m = Modulo.di(vista) { instradatore.apri(m) }
         }
     }
 }

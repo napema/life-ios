@@ -45,8 +45,10 @@ struct GiorniPiano: Identifiable {
 }
 
 struct VistaPasti: View {
+    init(scheda: String) { self.scheda = scheda }
+
     @ObservedObject private var logica = Logica.s
-    @State private var scheda = "oggi"
+    let scheda: String
     @State private var fascia: FasciaScelta?
     @State private var scegli: FasciaScelta?
     @State private var aggiungi: AggiuntaScelta?
@@ -61,12 +63,6 @@ struct VistaPasti: View {
         let lunedi = Tempo.piuGiorni(pas("dati.lunediDi", .str(iso)).t, avanti * 7)
         let daPianificare = pianoDaProporre
         return Pagina {
-            Picker("Scheda", selection: $scheda) {
-                Text("Oggi").tag("oggi")
-                Text("Settimana").tag("settimana")
-                Text("Altro").tag("altro")
-            }
-            .pickerStyle(.segmented)
             switch scheda {
             case "settimana":
                 selettoreSettimana(lunedi)
@@ -94,13 +90,13 @@ struct VistaPasti: View {
                 giornata
             }
         }
-        .navigationTitle("Pasti")
+        .navigationTitle(scheda == "settimana" ? "Settimana" : scheda == "altro" ? "Altro" : "Pasti")
         .toolbar {
             Button { importa = true } label: { Image(systemName: "square.and.arrow.down") }
         }
         .onAppear {
             // La domenica dalle 15 propone la settimana che arriva, una volta per apertura
-            if daPianificare != nil, !pianificazioneProposta {
+            if scheda == "oggi", daPianificare != nil, !pianificazioneProposta {
                 pianificazioneProposta = true
                 pianifica = GiorniPiano(giorni: giorniProssima)
             }

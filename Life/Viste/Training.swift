@@ -51,8 +51,10 @@ struct IdTesto: Identifiable {
 }
 
 struct VistaTraining: View {
+    init(scheda: String) { self.scheda = scheda }
+
     @ObservedObject private var logica = Logica.s
-    @State private var scheda = "settimana"
+    let scheda: String
     @State private var settimana: Int = Logica.s.chiama("allenamenti.dati.settimanaCorrente").int ?? 1
     @State private var slot: IdTesto?
     @State private var corsa: IdTesto?
@@ -62,12 +64,6 @@ struct VistaTraining: View {
     var body: some View {
         let _ = logica.versione
         return Pagina {
-            Picker("Scheda", selection: $scheda) {
-                Text("Settimana").tag("settimana")
-                Text("Andamento").tag("andamento")
-                Text("Altro").tag("altro")
-            }
-            .pickerStyle(.segmented)
             switch scheda {
             case "andamento": andamento
             case "altro": ImpostazioniTraining()
@@ -77,7 +73,7 @@ struct VistaTraining: View {
                 contenutoSettimana
             }
         }
-        .navigationTitle("Training")
+        .navigationTitle(scheda == "andamento" ? "Andamento" : scheda == "altro" ? "Altro" : "Training")
         .toolbar {
             Button { importa = IdTesto(id: scheda == "andamento" ? "corse" : "allenamenti") } label: { Image(systemName: "square.and.arrow.down") }
         }

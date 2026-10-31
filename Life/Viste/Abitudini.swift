@@ -37,8 +37,10 @@ struct AbitudineDaModificare: Identifiable {
 }
 
 struct VistaAbitudini: View {
+    init(scheda: String) { self.scheda = scheda }
+
     @ObservedObject private var logica = Logica.s
-    @State private var scheda = "oggi"
+    let scheda: String
     @State private var giorno = Logica.s.chiama("ui.oggiISO").t
     @State private var dettaglio: AbitudineAperta?
     @State private var modifica: AbitudineDaModificare?
@@ -49,12 +51,6 @@ struct VistaAbitudini: View {
         let oggi = logica.chiama("ui.oggiISO").t
         let tutte = abi("dati.abitudiniVive").list
         return Pagina {
-            Picker("Scheda", selection: $scheda) {
-                Text("Oggi").tag("oggi")
-                Text("Progressi").tag("progressi")
-                Text("Altro").tag("altro")
-            }
-            .pickerStyle(.segmented)
             if scheda == "progressi" {
                 progressi(tutte, oggi)
             } else if scheda == "altro" {
@@ -72,7 +68,7 @@ struct VistaAbitudini: View {
                 lista(tutte)
             }
         }
-        .navigationTitle("Abitudini")
+        .navigationTitle(scheda == "progressi" ? "Progressi" : scheda == "altro" ? "Altro" : "Abitudini")
         .toolbar {
             Button { modifica = AbitudineDaModificare(idAbitudine: nil) } label: { Image(systemName: "plus") }
         }
