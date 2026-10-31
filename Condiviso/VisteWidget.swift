@@ -153,7 +153,9 @@ private struct GiornoGrande: View {
 
 struct VistaOggiWidget: View {
     let v: VoceWidget
-    @Environment(\.widgetFamily) private var famiglia
+    var forza: WidgetFamily? = nil
+    @Environment(\.widgetFamily) private var ambiente
+    private var famiglia: WidgetFamily { forza ?? ambiente }
     var body: some View {
         if let d = v.dati {
             let eventi = d.eventiDavanti(v.date)
@@ -208,7 +210,9 @@ struct VistaOggiWidget: View {
 
 struct VistaEventiWidget: View {
     let v: VoceWidget
-    @Environment(\.widgetFamily) private var famiglia
+    var forza: WidgetFamily? = nil
+    @Environment(\.widgetFamily) private var ambiente
+    private var famiglia: WidgetFamily { forza ?? ambiente }
     var body: some View {
         if let d = v.dati {
             let lista = d.prossimiDavanti(v.date)
@@ -228,7 +232,9 @@ struct VistaEventiWidget: View {
 
 struct VistaTodoWidget: View {
     let v: VoceWidget
-    @Environment(\.widgetFamily) private var famiglia
+    var forza: WidgetFamily? = nil
+    @Environment(\.widgetFamily) private var ambiente
+    private var famiglia: WidgetFamily { forza ?? ambiente }
     var body: some View {
         if let d = v.dati {
             let quanti = famiglia == .systemSmall ? 4 : famiglia == .systemMedium ? 4 : 11
@@ -253,7 +259,9 @@ struct VistaTodoWidget: View {
 /// Lo stile del widget di Promemoria: cerchio, nome della lista, numero grande.
 struct VistaPromemoriaWidget: View {
     let v: VoceWidget
-    @Environment(\.widgetFamily) private var famiglia
+    var forza: WidgetFamily? = nil
+    @Environment(\.widgetFamily) private var ambiente
+    private var famiglia: WidgetFamily { forza ?? ambiente }
     var body: some View {
         if let d = v.dati {
             let n = d.task.count
@@ -321,7 +329,9 @@ struct MeseWidget: View {
 
 struct VistaCalendarioWidget: View {
     let v: VoceWidget
-    @Environment(\.widgetFamily) private var famiglia
+    var forza: WidgetFamily? = nil
+    @Environment(\.widgetFamily) private var ambiente
+    private var famiglia: WidgetFamily { forza ?? ambiente }
     var body: some View {
         if let d = v.dati {
             let eventi = d.prossimiDavanti(v.date)
@@ -353,7 +363,9 @@ struct VistaCalendarioWidget: View {
 
 /// Finanze: i due pulsanti, grandi. Aprono Life sul foglio giusto.
 struct VistaFinanzeWidget: View {
-    @Environment(\.widgetFamily) private var famiglia
+    var forza: WidgetFamily? = nil
+    @Environment(\.widgetFamily) private var ambiente
+    private var famiglia: WidgetFamily { forza ?? ambiente }
     var body: some View {
         let layout = famiglia == .systemSmall ? AnyLayout(VStackLayout(spacing: 8)) : AnyLayout(HStackLayout(spacing: 8))
         layout {
@@ -378,7 +390,9 @@ struct VistaFinanzeWidget: View {
 
 struct BloccoEventoWidget: View {
     let v: VoceWidget
-    @Environment(\.widgetFamily) private var famiglia
+    var forza: WidgetFamily? = nil
+    @Environment(\.widgetFamily) private var ambiente
+    private var famiglia: WidgetFamily { forza ?? ambiente }
     var body: some View {
         let d = v.dati
         let e = d?.prossimoDiOggi(v.date)
@@ -414,7 +428,9 @@ struct BloccoEventoWidget: View {
 
 struct BloccoTodoWidget: View {
     let v: VoceWidget
-    @Environment(\.widgetFamily) private var famiglia
+    var forza: WidgetFamily? = nil
+    @Environment(\.widgetFamily) private var ambiente
+    private var famiglia: WidgetFamily { forza ?? ambiente }
     var body: some View {
         let task = v.dati?.task ?? []
         Group {

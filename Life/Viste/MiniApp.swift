@@ -472,17 +472,17 @@ struct AnteprimaWidget: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 12) {
-                cornice(358, 170) { VistaOggiWidget(v: voce).environment(\.widgetFamily, .systemMedium) }
-                cornice(358, 170) { VistaPromemoriaWidget(v: voce).environment(\.widgetFamily, .systemMedium) }
+                cornice(358, 170) { VistaOggiWidget(v: voce, forza: .systemMedium) }
+                cornice(358, 170) { VistaPromemoriaWidget(v: voce, forza: .systemMedium) }
                 HStack(spacing: 12) {
-                    cornice(170, 170) { VistaTodoWidget(v: voce).environment(\.widgetFamily, .systemSmall) }
-                    cornice(170, 170) { VistaCalendarioWidget(v: voce).environment(\.widgetFamily, .systemSmall) }
+                    cornice(170, 170) { VistaTodoWidget(v: voce, forza: .systemSmall) }
+                    cornice(170, 170) { VistaCalendarioWidget(v: voce, forza: .systemSmall) }
                 }
                 HStack(spacing: 12) {
-                    cornice(170, 170) { VistaFinanzeWidget().environment(\.widgetFamily, .systemSmall) }
-                    cornice(170, 170) { VistaEventiWidget(v: voce).environment(\.widgetFamily, .systemSmall) }
+                    cornice(170, 170) { VistaFinanzeWidget(forza: .systemSmall) }
+                    cornice(170, 170) { VistaEventiWidget(v: voce, forza: .systemSmall) }
                 }
-                cornice(358, 76) { BloccoEventoWidget(v: voce).environment(\.widgetFamily, .accessoryRectangular) }
+                cornice(358, 76) { BloccoEventoWidget(v: voce, forza: .accessoryRectangular) }
             }
             .padding()
         }
