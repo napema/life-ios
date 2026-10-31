@@ -80,7 +80,13 @@ final class Logica: ObservableObject {
         let tipo: String
     }
 
-    private(set) var contesto = JSContext()!
+    /// Il JavaScript si prepara in sottofondo: lo aspetta solo chi deve davvero eseguirlo.
+    private var contestoPronto: JSContext!
+    private let pronto = DispatchGroup()
+    private var contesto: JSContext {
+        pronto.wait()
+        return contestoPronto
+    }
     /// Ogni contesto ha il suo numero: quello sostituito da un aggiornamento non scrive più nulla.
     private var generazione = 0
     private var ultimaGenerazione = 0
@@ -117,9 +123,16 @@ final class Logica: ObservableObject {
         if let d = try? Data(contentsOf: fileMemoria), let m = try? JSONDecoder().decode([String: String].self, from: d) {
             memoria = m
         }
-        let t0 = Date()
-        caricaAllAvvio()
-        Misure.s.segna("logica", Date().timeIntervalSince(t0))
+        caricaLetture()
+        ultimoGiorno = Tempo.oggi()
+        ultimoRicalcolo = Date()
+        pronto.enter()
+        DispatchQueue.global(qos: .userInteractive).async { [self] in
+            let t0 = Date()
+            caricaAllAvvio()
+            Misure.s.segna("logica", Date().timeIntervalSince(t0))
+            pronto.leave()
+        }
     }
 
     // MARK: Il codice in uso
@@ -133,7 +146,7 @@ final class Logica: ObservableObject {
             let nuovo = creaContesto(scaricato)
             AggiornaLogica.fineProva()
             if nuovo.funziona {
-                contesto = nuovo.contesto
+                contestoPronto = nuovo.contesto
                 versioneLogica = t.versione
                 logicaScaricata = true
                 return
@@ -145,9 +158,10 @@ final class Logica: ObservableObject {
         }
         guard let delBundle else {
             print("[logica] bundle mancante")
+            contestoPronto = JSContext()
             return
         }
-        contesto = creaContesto(delBundle).contesto
+        contestoPronto = creaContesto(delBundle).contesto
         versioneLogica = versioneBundle
     }
 
@@ -183,7 +197,7 @@ final class Logica: ObservableObject {
             return false
         }
         vecchiTimer.values.forEach { $0.invalidate() }
-        contesto = nuovo.contesto
+        contestoPronto = nuovo.contesto
         versioneLogica = versione
         logicaScaricata = scaricata
         if avviata {
@@ -290,11 +304,12 @@ final class Logica: ObservableObject {
         DispatchQueue.main.asyncAfter(deadline: .now() + ritardo, execute: w)
     }
 
-    /// Rifà in sottofondo le letture usate di recente, dalla più recente.
-    func riscalda() {
+    /// Rifà in sottofondo le letture usate di recente, dalla più recente. Con `tutte` rifà anche quelle
+    /// riprese dalla sessione precedente e poi ridisegna.
+    func riscalda(tutte: Bool = false) {
         serratura.lock()
         let giro = giroRicordi
-        let daFare = ultimeLetture.sorted { $0.value > $1.value }.lazy.map(\.key).filter { !$0.percorso.hasPrefix("ui.") && self.ricordati[$0] == nil }.prefix(300).map { $0 }
+        let daFare = ultimeLetture.sorted { $0.value > $1.value }.lazy.map(\.key).filter { !$0.percorso.hasPrefix("ui.") && (tutte || self.ricordati[$0] == nil) }.prefix(300).map { $0 }
         serratura.unlock()
         guard !daFare.isEmpty else { return }
         DispatchQueue.global(qos: .utility).async { [weak self] in
@@ -309,17 +324,23 @@ final class Logica: ObservableObject {
                 if self.giroRicordi == giro { self.ricordati[chiave] = r }
                 self.serratura.unlock()
             }
+            if tutte { DispatchQueue.main.async { self?.versione &+= 1 } }
         }
     }
 
-    /// All'avvio: riprende le letture della volta scorsa.
+    /// All'avvio: le letture della volta scorsa e, se è lo stesso giorno, anche i loro risultati.
+    /// Così la prima schermata si disegna subito; poi si ricontrolla tutto in sottofondo.
     private func caricaLetture() {
         guard let d = try? Data(contentsOf: fileLetture) else { return }
+        let f = J.parse(d)
+        let stessoGiorno = f.g.str == Tempo.oggi()
         var i = 0
-        for voce in J.parse(d).list.reversed() {
+        for voce in f.l.list.reversed() {
             guard let p = voce.p.str else { continue }
             i += 1
-            ultimeLetture[ChiaveLettura(percorso: p, argomenti: voce.a.list)] = i
+            let chiave = ChiaveLettura(percorso: p, argomenti: voce.a.list)
+            ultimeLetture[chiave] = i
+            if stessoGiorno, case .obj(let o) = voce, let v = o["v"] { ricordati[chiave] = v }
         }
         contatoreLetture = i
     }
@@ -329,31 +350,24 @@ final class Logica: ObservableObject {
         let voci = ultimeLetture.sorted { $0.value > $1.value }.prefix(500).map(\.key)
         ultimeLetture = Dictionary(uniqueKeysWithValues: voci.enumerated().map { ($1, voci.count - $0) })
         contatoreLetture = voci.count
+        let valori = ricordati
         serratura.unlock()
         let f = fileLetture
+        let giorno = Tempo.oggi()
         DispatchQueue.global(qos: .utility).async {
-            let elenco: [J] = voci.map { .obj(["p": .str($0.percorso), "a": .arr($0.argomenti)]) }
-            try? J.arr(elenco).codificato.write(to: f, options: .atomic)
-        }
-    }
-
-    /// Il primo giro, appena la logica è pronta.
-    func preparaLetture() {
-        serratura.lock()
-        caricaLetture()
-        serratura.unlock()
-        riscalda()
-    }
-
-    /// Per le funzioni che rispondono con una promessa.
-    func chiamaAsync(_ percorso: String, _ argomenti: J...) async -> J {
-        await withCheckedContinuation { (c: CheckedContinuation<J, Never>) in
-            let fatto: @convention(block) (String) -> Void = { testo in
-                c.resume(returning: J.parse(testo).ok)
+            let elenco: [J] = voci.map { chiave in
+                var o: [String: J] = ["p": .str(chiave.percorso), "a": .arr(chiave.argomenti)]
+                // I risultati enormi (tutti i movimenti) non valgono il tempo di rileggerli
+                if let v = valori[chiave], v.codificato.count < 100_000 { o["v"] = v }
+                return .obj(o)
             }
-            contesto.objectForKeyedSubscript("__chiamaAsync")?.call(withArguments: [percorso, J.arr(argomenti).testoJSON, unsafeBitCast(fatto, to: AnyObject.self)])
+            let tutto: J = .obj(["g": .str(giorno), "l": .arr(elenco)])
+            try? tutto.codificato.write(to: f, options: .atomic)
         }
     }
+
+    /// Il primo giro, appena la prima schermata è in piedi.
+    func preparaLetture() { riscalda(tutte: true) }
 
     func avvia() {
         avviata = true

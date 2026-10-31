@@ -369,15 +369,19 @@ private struct ColonnaOre: View {
     let altezza: CGFloat
     var body: some View {
         ZStack(alignment: .topTrailing) {
-            VStack(spacing: 0) {
-                ForEach(0..<24, id: \.self) { h in
-                    Text(h == 0 ? "" : String(format: "%02d:00", h))
-                        .font(.system(size: 11, weight: .medium))
-                        .monospacedDigit()
-                        .foregroundStyle(Color.secondarioLife)
-                        .frame(width: margineOreCalendario - 8, height: altezza, alignment: .topTrailing)
-                        .offset(y: -7)
-                        .id("ora\(h)")
+            TimelineView(.periodic(from: .now, by: 60)) { c in
+                let adesso = minutiCalendario(Tempo.oraRoma(c.date))
+                VStack(spacing: 0) {
+                    ForEach(0..<24, id: \.self) { h in
+                        Text(h == 0 ? "" : String(format: "%02d:00", h))
+                            .font(.system(size: 11, weight: .medium))
+                            .monospacedDigit()
+                            .foregroundStyle(Color.secondarioLife)
+                            .opacity(abs(adesso - h * 60) < 16 ? 0 : 1)
+                            .frame(width: margineOreCalendario - 8, height: altezza, alignment: .topTrailing)
+                            .offset(y: -7)
+                            .id("ora\(h)")
+                    }
                 }
             }
             TimelineView(.periodic(from: .now, by: 30)) { c in
@@ -473,7 +477,7 @@ private struct ColonnaGiorno: View {
             let y = CGFloat(minutiCalendario(Tempo.oraRoma(c.date))) / 60 * altezza
             ZStack(alignment: .leading) {
                 Rectangle().fill(Color.rosaLife).frame(width: larghezza, height: 1.5)
-                Circle().fill(Color.rosaLife).frame(width: 8, height: 8).offset(x: -4)
+                Circle().fill(Color.rosaLife).frame(width: 8, height: 8)
             }
             .frame(height: 8)
             .offset(y: y - 4)
@@ -509,7 +513,7 @@ private struct ColonnaGiorno: View {
                 vista
             }
         } else if let t = b.task {
-            BloccoTaskVista(task: t)
+            BloccoTaskVista(task: t, stretto: larghezza < 70)
                 .frame(width: max(10, larghezza), height: min(h, 26))
                 .onTapGesture { apriTask(t) }
                 .draggable("task:\(t.id.t)")
@@ -573,14 +577,14 @@ private struct BloccoEventoVista: View {
                     }
                 } else {
                     let righeTitolo = max(1, min(stretto ? 4 : 3, Int((altezza - (altezza > 62 ? 30 : 8)) / 15)))
-                    Text(titolo).font(.system(size: stretto ? 10.5 : 12.5, weight: .semibold)).lineLimit(righeTitolo).fixedSize(horizontal: false, vertical: true)
+                    Text(titolo).font(.system(size: stretto ? 10 : 12.5, weight: .semibold)).lineLimit(righeTitolo).minimumScaleFactor(stretto ? 0.8 : 1)
                     if altezza > 46, !stretto { Text("\(inizio) – \(fine)").font(.system(size: piccolo)).monospacedDigit().opacity(0.8).lineLimit(1) }
                     if altezza > 62, !dove.isEmpty { Text(dove).font(.system(size: piccolo)).opacity(0.8).lineLimit(stretto ? 1 : 2) }
                 }
             }
             .foregroundStyle(tinta.testo)
-            .padding(.leading, stretto ? 6 : 8)
-            .padding(.trailing, 3)
+            .padding(.leading, stretto ? 5.5 : 8)
+            .padding(.trailing, stretto ? 1 : 3)
             .padding(.top, altezza < 34 ? 3 : 4)
         }
         .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
@@ -591,10 +595,13 @@ private struct BloccoEventoVista: View {
 
 private struct BloccoTaskVista: View {
     let task: J
+    var stretto = false
     var body: some View {
         HStack(spacing: 4) {
-            Casella(task: task, lato: 14)
-            Text(task.title.t).font(.system(size: 11.5, weight: .medium)).foregroundStyle(Color.accentoLife).lineLimit(1)
+            if !stretto {
+                Casella(task: task, lato: 15).frame(width: 18, height: 18)
+            }
+            Text(task.title.t).font(.system(size: stretto ? 10 : 11.5, weight: .medium)).foregroundStyle(Color.accentoLife).lineLimit(1).minimumScaleFactor(0.85)
             Spacer(minLength: 0)
         }
         .padding(.horizontal, 5)
@@ -695,8 +702,8 @@ private struct TestataGiorni: View {
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
         .frame(height: 50)
-        .padding(.leading, margineOreCalendario)
         .clipped()
+        .padding(.leading, margineOreCalendario)
     }
 
     private func cella(_ g: String) -> some View {
@@ -757,8 +764,8 @@ private struct RigaIntera: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .topLeading)
                 .frame(height: CGFloat(righe) * 25 + 4)
-                .padding(.leading, margineOreCalendario)
                 .clipped()
+                .padding(.leading, margineOreCalendario)
                 .overlay(alignment: .topLeading) {
                     Text("tutto il\ngiorno")
                         .font(.system(size: 9.5, weight: .medium))
@@ -799,8 +806,8 @@ private struct RigaIntera: View {
             if let e = v.evento { apriEvento(e) } else if let task { apriTask(task) }
         } label: {
             HStack(spacing: 4) {
-                if let task { Casella(task: task, lato: 13) }
-                Text(v.titolo.isEmpty ? "(senza titolo)" : v.titolo).font(.system(size: 11.5, weight: .semibold)).lineLimit(1)
+                if let task, colonna >= 70 { Casella(task: task, lato: 14).frame(width: 17, height: 17) }
+                Text(v.titolo.isEmpty ? "(senza titolo)" : v.titolo).font(.system(size: colonna < 70 ? 10 : 11.5, weight: .semibold)).lineLimit(1)
                 Spacer(minLength: 0)
             }
             .padding(.horizontal, 6)
