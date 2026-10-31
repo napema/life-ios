@@ -209,6 +209,21 @@ final class ProveCalendario: XCTestCase {
         }
         print("MENU aperto \(aperture)/5")
         XCTAssertEqual(aperture, 5, "I tre puntini non aprono il menu ogni volta")
+        // E dal menu si arriva al foglio; lo stesso per Uscita
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.853, dy: 0.868)).tap()
+        Thread.sleep(forTimeInterval: 1.2)
+        qualunque(app, "Pagamento previsto").tap()
+        Thread.sleep(forTimeInterval: 1.5)
+        foto("finanze-foglio-previsto")
+        XCTAssertFalse(qualunque(app, "Altre azioni").isHittable, "Il foglio del pagamento non si è aperto")
+        app.terminate()
+        let di_nuovo = avvia("finanze")
+        di_nuovo.coordinate(withNormalizedOffset: CGVector(dx: 0.2, dy: 0.868)).tap()
+        Thread.sleep(forTimeInterval: 1.5)
+        foto("finanze-foglio-uscita")
+        XCTAssertFalse(qualunque(di_nuovo, "Altre azioni").isHittable, "Uscita non apre il suo foglio")
+        di_nuovo.terminate()
+        return
         app.terminate()
     }
 }

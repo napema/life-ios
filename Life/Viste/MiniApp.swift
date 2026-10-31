@@ -243,23 +243,34 @@ struct BarraGestiFinanze: View {
             Button { fogli.apri(.movimento(nil, "in", nil)) } label: { Label("Entrata", systemImage: "plus").fontWeight(.semibold) }
                 .foregroundStyle(Color.successoLife)
             Spacer(minLength: 6)
-            Menu {
-                Button { fogli.apri(.previsto) } label: { Label("Pagamento previsto", systemImage: "calendar") }
-                Button { fogli.apri(.lista) } label: { Label("Lista d'attesa", systemImage: "clock") }
-                Button { fogli.apri(.movimento(nil, "giro", nil)) } label: { Label("Giroconto, rimborso, reso, ricarica", systemImage: "arrow.left.arrow.right") }
-            } label: {
-                Image(systemName: "ellipsis")
-                    .font(.body.weight(.semibold))
-                    .foregroundStyle(Color.primary)
-                    .frame(width: 44, height: 36)
-                    .contentShape(Rectangle())
-            }
-            .accessibilityLabel("Altre azioni")
+            BottonePuntini().frame(width: 44, height: 36)
         }
         .font(.subheadline)
         .buttonStyle(.plain)
         .padding(.horizontal, 16)
     }
+}
+
+/// I tre puntini col resto dei gesti. Il Menu di SwiftUI dentro la barra sopra le schede non si apre
+/// sempre: il bottone di UIKit sì, e il menu nasce dal bottone allo stesso modo.
+private struct BottonePuntini: UIViewRepresentable {
+    func makeUIView(context: Context) -> UIButton {
+        var aspetto = UIButton.Configuration.plain()
+        aspetto.image = UIImage(systemName: "ellipsis", withConfiguration: UIImage.SymbolConfiguration(textStyle: .body, scale: .medium).applying(UIImage.SymbolConfiguration(weight: .semibold)))
+        aspetto.baseForegroundColor = .label
+        let b = UIButton(configuration: aspetto)
+        b.accessibilityLabel = "Altre azioni"
+        b.showsMenuAsPrimaryAction = true
+        b.preferredMenuElementOrder = .fixed
+        b.menu = UIMenu(children: [
+            UIAction(title: "Pagamento previsto", image: UIImage(systemName: "calendar")) { _ in Fogli.s.apri(.previsto) },
+            UIAction(title: "Lista d'attesa", image: UIImage(systemName: "clock")) { _ in Fogli.s.apri(.lista) },
+            UIAction(title: "Giroconto, rimborso, reso, ricarica", image: UIImage(systemName: "arrow.left.arrow.right")) { _ in Fogli.s.apri(.movimento(nil, "giro", nil)) },
+        ])
+        return b
+    }
+
+    func updateUIView(_ b: UIButton, context: Context) {}
 }
 
 /// «Annulla» e gli avvisi stanno sopra qualsiasi mini-app.
