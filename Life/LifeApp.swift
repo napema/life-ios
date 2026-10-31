@@ -119,6 +119,9 @@ struct Radice: View {
         .sheet(item: Binding(get: { taskDaNotifica.map { TaskAperto(task: $0) } }, set: { taskDaNotifica = $0?.task })) { a in
             SchedaTask(idTask: a.task.id.t)
         }
+        .sheet(isPresented: $impostazioni) {
+            NavigationStack { VistaImpostazioni() }
+        }
         .onChange(of: notifiche.daAprire) { _, apri in
             guard let apri else { return }
             notifiche.daAprire = nil
@@ -139,7 +142,7 @@ struct Radice: View {
         case "oggi", "calendario", "programmate", "liste", "home": scheda = demo
         case "finanze", "abitudini", "mobilita", "pasti": modulo = Modulo.di(demo)
         case "training": modulo = Modulo.di("allenamenti")
-        case "impostazioni": scheda = "liste"
+        case "impostazioni": scheda = "liste"; impostazioni = true
         default: break
         }
     }

@@ -63,6 +63,12 @@ jobs:
             sleep 7
             xcrun simctl io "$SIM" screenshot "screenshot/$vista.png"
           done
+          # Avvio vero, senza dati finti: deve arrivare all'accesso e restare aperta
+          xcrun simctl terminate "$SIM" it.life.app || true
+          xcrun simctl launch "$SIM" it.life.app
+          sleep 10
+          xcrun simctl spawn "$SIM" launchctl list | grep -q "it.life.app"
+          xcrun simctl io "$SIM" screenshot "screenshot/avvio-vero.png"
 
       - name: Conserva i risultati
         if: always()
@@ -96,6 +102,13 @@ jobs:
               "developerName": "Life",
               "localizedDescription": "La mia app personale.",
               "iconURL": "https://raw.githubusercontent.com/${{ github.repository }}/main/Life/Risorse/icona.png",
+              "appPermissions": {
+                "entitlements": [],
+                "privacy": {
+                  "NSCameraUsageDescription": "Per scattare le foto dei progressi di Mobilità.",
+                  "NSPhotoLibraryUsageDescription": "Per scegliere le foto dei progressi di Mobilità."
+                }
+              },
               "versions": [{
                 "version": "$VERSIONE",
                 "buildVersion": "$NUMERO",
