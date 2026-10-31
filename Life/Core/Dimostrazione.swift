@@ -7,7 +7,7 @@ enum Dimostrazione {
         let oggi = Tempo.oggi()
         // L'evento su cui provano le dita: a ogni avvio torna al suo posto, vicino a dove si apre la griglia
         let oraProva = min(21, minutiCalendario(Tempo.oraRoma(Date())) / 60 + 1)
-        Archivio.s.scrivi("events", ["id": "demo-e3", "calendar_id": "demo-cal", "title": "Riunione", "notes": nil, "location": nil, "start_at": .str(Tempo.iso(Tempo.istante(oggi, String(format: "%02d:00", oraProva)))), "end_at": .str(Tempo.iso(Tempo.istante(oggi, String(format: "%02d:30", oraProva + 1)))), "all_day": false, "rrule": nil, "deleted_at": nil], sincronizza: false)
+        Archivio.s.scrivi("events", [["id": "demo-e3", "calendar_id": "demo-cal", "title": "Riunione", "notes": nil, "location": nil, "start_at": .str(Tempo.iso(Tempo.istante(oggi, String(format: "%02d:00", oraProva)))), "end_at": .str(Tempo.iso(Tempo.istante(oggi, String(format: "%02d:30", oraProva + 1)))), "all_day": false, "rrule": nil, "deleted_at": nil]], sincronizza: false)
         guard Archivio.s.tutte("projects").isEmpty else { return }
         let inbox = "demo-inbox"
         let progetto = "demo-progetto"
