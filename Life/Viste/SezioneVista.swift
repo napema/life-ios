@@ -119,6 +119,7 @@ private struct BarraTempo: View {
                 ), displayedComponents: .hourAndMinute)
                 .labelsHidden()
                 .environment(\.timeZone, Tempo.roma)
+                .environment(\.locale, Locale(identifier: "it_IT"))
                 Spacer(minLength: 0)
                 if stato.istante != nil {
                     Button(oggi ? "Adesso" : "Alle 07:15") { tocco(); stato.istante = nil }.font(.subheadline.weight(.semibold))
@@ -472,6 +473,7 @@ struct SezSchedaPax: View {
                 ToolbarItem(placement: .confirmationAction) { Button("Salva", action: salva).fontWeight(.semibold).disabled(!pronto) }
             }
             .environment(\.timeZone, Tempo.roma)
+            .environment(\.locale, Locale(identifier: "it_IT"))
         }
     }
 
@@ -584,7 +586,7 @@ struct SezGiornata: View {
                         RoundedRectangle(cornerRadius: 5, style: .continuous)
                             .fill(Sez.colore(s.tipo.t))
                             .overlay(alignment: .leading) {
-                                if !limite {
+                                if !limite, fine - inizio >= 44 {
                                     Text(s.motivo.str ?? Sez.nome(s.tipo.t)).font(.system(size: 10, weight: .semibold)).foregroundStyle(.white).lineLimit(1).padding(.horizontal, 4)
                                 }
                             }
