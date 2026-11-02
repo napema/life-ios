@@ -95,7 +95,7 @@ prova('sezione: fascia oraria', () => {
 });
 prova('sezione: messaggio', () => {
   const m = chiama('sezione.dati.messaggio', chiama('ui.oggiISO'));
-  if (!m.includes('Forza presente della sezione: 2 Ufficiali Frequentatori')) throw new Error(m);
+  if (!m.includes('Forza presente della sezione: 1 Ufficiale Frequentatore') || !m.includes('ROSSI Mario impegnato in altra attività dalle 11:55 alle 13:30')) throw new Error(m);
   return m.split(String.fromCharCode(10)).slice(9, 11);
 });
 

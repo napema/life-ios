@@ -25,15 +25,8 @@ enum Sez {
     static var adesso: Int { minuti(Tempo.oraRoma(Date())) }
 
     /** «D'INTINO» → «D'Intino», come sul sito. */
-    static func maiuscole(_ s: String) -> String {
-        var out = ""
-        var inizio = true
-        for c in s.lowercased() {
-            out.append(inizio ? Character(String(c).uppercased()) : c)
-            inizio = c == " " || c == "'" || c == "’" || c == "-"
-        }
-        return out
-    }
+    /** I cognomi si scrivono sempre tutti in maiuscolo, come sul sito. */
+    static func maiuscole(_ s: String) -> String { s.trimmingCharacters(in: .whitespaces).uppercased(with: Locale(identifier: "it_IT")) }
 
     static func nomeCompleto(_ p: J) -> String { [p.grado.t, maiuscole(p.cognome.t), p.nome.t].filter { !$0.isEmpty }.joined(separator: " ") }
 
