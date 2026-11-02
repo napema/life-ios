@@ -135,6 +135,14 @@ struct MiniApp: View {
                 SchedaApp(id: "progressi", titolo: "Progressi", icona: "chart.line.uptrend.xyaxis"),
                 altro,
             ]
+        case "sezione":
+            return [
+                SchedaApp(id: "quadro", titolo: "Quadro", icona: "person.3.fill"),
+                SchedaApp(id: "giornata", titolo: "Giornata", icona: "clock"),
+                SchedaApp(id: "messaggio", titolo: "Messaggio", icona: "paperplane"),
+                SchedaApp(id: "appunti", titolo: "Appunti", icona: "note.text"),
+                altro,
+            ]
         case "pasti":
             return [
                 SchedaApp(id: "oggi", titolo: "Oggi", icona: "fork.knife"),
@@ -212,6 +220,7 @@ struct MiniApp: View {
         case "allenamenti": VistaTraining(scheda: s)
         case "mobilita": VistaMobilita(scheda: s)
         case "pasti": VistaPasti(scheda: s)
+        case "sezione": VistaSezione(scheda: s)
         default: EmptyView()
         }
     }

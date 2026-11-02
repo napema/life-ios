@@ -45,7 +45,8 @@ for (const f of file(path.join(qui, '../Life'))) {
   const testo = readFileSync(f, 'utf8');
   const nome = path.basename(f);
   for (const m of testo.matchAll(/\b(fin|abi|tra|mob|pas)\("([A-Za-z0-9_.]+)"/g)) percorsi.set(`${PREFISSI[m[1]]}.${m[2]}`, nome);
-  for (const m of testo.matchAll(/\.(?:chiama|chiamaAsync)\("([A-Za-z0-9_.]+)"/g)) percorsi.set(m[1], nome);
+  for (const m of testo.matchAll(/Sez\.chiama\("([A-Za-z0-9_.]+)"/g)) percorsi.set(`sezione.dati.${m[1]}`, nome);
+  for (const m of testo.matchAll(/(?<!Sez)\.(?:chiama|chiamaAsync)\("([A-Za-z0-9_.]+)"/g)) percorsi.set(m[1], nome);
   for (const m of testo.matchAll(/fin\(previsto \? "([^"]+)" : "([^"]+)"/g)) {
     percorsi.set(`finanze.${m[1]}`, nome);
     percorsi.set(`finanze.${m[2]}`, nome);

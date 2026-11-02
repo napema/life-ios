@@ -264,7 +264,7 @@ final class Logica: ObservableObject {
     // non cambiano nulla, quindi si ricordano finché un dato non cambia e si rifanno in sottofondo,
     // così quando apri una mini-app i numeri ci sono già.
 
-    private static let scritture = try! NSRegularExpression(pattern: "^(alterna|elimina|salva|scrivi|aggiungi|cambia|modifica|ripara|ripristina|pianifica|scegli|togli|segna|sblocca|riancora|impara|migra|applica|chiudi|esegui|registra|conferma|assicura|rigenera|spunta|fai|dimentica|nuovoId|meta$|prepara|unisci)")
+    private static let scritture = try! NSRegularExpression(pattern: "^(imposta|cancella|alterna|elimina|salva|scrivi|aggiungi|cambia|modifica|ripara|ripristina|pianifica|scegli|togli|segna|sblocca|riancora|impara|migra|applica|chiudi|esegui|registra|conferma|assicura|rigenera|spunta|fai|dimentica|nuovoId|meta$|prepara|unisci)")
     private static var gia: [String: Bool] = [:]
     private static let serraturaPercorsi = NSLock()
 

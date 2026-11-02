@@ -79,5 +79,25 @@ prova('mobilita: sessione', () => chiama('mobilita.sessione.oggiISO'));
 prova('pasti: bersagli', () => chiama('pasti.calcolo.bersagli'));
 prova('persistenza', () => [...memoria.keys()].filter((k) => k.startsWith('atlas.')));
 console.log(log.filter((l) => l.includes('errore')).slice(0, 10).join('\n'));
+// Sezione: organico, un'assenza dalle 11:55 alle 13:30, il messaggio delle 07:15
+prova('sezione: aggiungi', () => {
+  chiama('sezione.dati.aggiungiPax', [{ grado: 'S.Ten.', cognome: 'ROSSI', nome: 'Mario' }, { grado: 'S.Ten.', cognome: "D'ESEMPIO", nome: 'Luca' }]);
+  return chiama('sezione.dati.organico').length;
+});
+prova('sezione: fascia oraria', () => {
+  const [p] = chiama('sezione.dati.organico');
+  const g = chiama('ui.oggiISO');
+  chiama('sezione.dati.impostaStato', p.id, g, 'A', { motivo: 'Altra attività', frase: 'impegnato in altra attività', oraDal: '11:55', oraAl: '13:30', al: g });
+  const alle12 = chiama('sezione.dati.forza', g, 12 * 60).assenti.length;
+  const alle10 = chiama('sezione.dati.forza', g, 10 * 60).assenti.length;
+  if (alle12 !== 1 || alle10 !== 0) throw new Error(`assenti alle 12 ${alle12}, alle 10 ${alle10}`);
+  return { alle12, alle10 };
+});
+prova('sezione: messaggio', () => {
+  const m = chiama('sezione.dati.messaggio', chiama('ui.oggiISO'));
+  if (!m.includes('Forza presente della sezione: 2 Ufficiali Frequentatori')) throw new Error(m);
+  return m.split(String.fromCharCode(10)).slice(9, 11);
+});
+
 console.log(errori ? `${errori} prove fallite` : 'tutte le prove passate');
 process.exit(errori ? 1 : 0);
