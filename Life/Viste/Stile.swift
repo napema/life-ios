@@ -39,7 +39,10 @@ struct Modulo: Identifiable, Hashable {
     let colore: String
     let icona: String
 
-    static let tutti = [
+    /// Moduli in pausa: spariscono dalla home ma i dati restano (come IN_PAUSA in src/atlas/registro.ts).
+    /// Sezione: in pausa dal 9/11, fuori servizio. Per riattivarlo basta toglierlo da qui.
+    static let inPausa: Set<String> = ["sezione"]
+    static let elenco = [
         Modulo(id: "finanze", nome: "Finanze", colore: "#FF9500", icona: "eurosign.circle.fill"),
         Modulo(id: "abitudini", nome: "Abitudini", colore: "#5E5CE6", icona: "checkmark.seal.fill"),
         Modulo(id: "allenamenti", nome: "Training", colore: "#FF453A", icona: "figure.run"),
@@ -47,11 +50,12 @@ struct Modulo: Identifiable, Hashable {
         Modulo(id: "pasti", nome: "Pasti", colore: "#FF2D55", icona: "fork.knife"),
         Modulo(id: "sezione", nome: "Sezione", colore: "#A2845E", icona: "person.3.fill"),
     ]
+    static let tutti = elenco.filter { !inPausa.contains($0.id) }
     static let todo = Modulo(id: "todo", nome: "To do", colore: "#34C759", icona: "checkmark.square.fill")
     static let calendario = Modulo(id: "calendario", nome: "Calendario", colore: "#FF453A", icona: "calendar")
     /// Tutte le mini-app di Life, con la stessa dignità.
     static let app = [todo, calendario] + tutti
-    static func di(_ id: String) -> Modulo? { app.first { $0.id == id } }
+    static func di(_ id: String) -> Modulo? { ([todo, calendario] + elenco).first { $0.id == id } }
 }
 
 /// Una carta con gli angoli stondati, come le liste raggruppate di iOS.
