@@ -34,6 +34,37 @@ enum LinkLife {
         guard let id = e.id else { return calendario }
         return url("evento/\(id)/\(e.data ?? oggi)")
     }
+
+    // I pulsanti dei widget (ApriLifeIntent) consegnano qui il collegamento. L'app si registra come
+    // gestore; se non è ancora pronta (avvio a freddo) il collegamento aspetta, anche su file: così
+    // vale pure se l'intent gira nel processo del widget.
+    @MainActor static var gestore: ((URL) -> Void)?
+    @MainActor private static var inAttesa: URL?
+    private static let fileAttesa = "collegamento.txt"
+
+    @MainActor static func arrivato(_ u: URL) {
+        if let gestore {
+            gestore(u)
+            return
+        }
+        inAttesa = u
+        if let f = GruppoLife.file(fileAttesa) {
+            try? "\(Date().timeIntervalSince1970)|\(u.absoluteString)".write(to: f, atomically: true, encoding: .utf8)
+        }
+    }
+
+    /// Il collegamento rimasto in attesa (al massimo da 20 secondi), una volta sola.
+    @MainActor static func prendiInAttesa() -> URL? {
+        defer {
+            inAttesa = nil
+            if let f = GruppoLife.file(fileAttesa) { try? FileManager.default.removeItem(at: f) }
+        }
+        if let u = inAttesa { return u }
+        guard let f = GruppoLife.file(fileAttesa), let s = try? String(contentsOf: f, encoding: .utf8) else { return nil }
+        let parti = s.split(separator: "|", maxSplits: 1).map(String.init)
+        guard parti.count == 2, let quando = Double(parti[0]), Date().timeIntervalSince1970 - quando < 20 else { return nil }
+        return URL(string: parti[1])
+    }
 }
 
 /// La stessa risposta che legge il widget di Scriptable (funzione `claude`, indirizzo personale).

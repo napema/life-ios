@@ -650,6 +650,15 @@ struct RigaMovimento: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .contextMenu {
+            Button { Fogli.s.apri(.dettaglio(m.id.t)) } label: { Label("Apri", systemImage: "arrow.up.forward.square") }
+            Button { Fogli.s.apri(.movimento(m, tipo, nil)) } label: { Label("Modifica", systemImage: "pencil") }
+            Button {
+                Fogli.s.apri(.movimento(nil, tipo, ["imp": m.imp, "nota": m.nota, "cat": m.cat, "sub": m.sub, "pocket": m.pocket, "pocketTo": m.pocketTo]))
+            } label: { Label("Duplica a oggi", systemImage: "plus.square.on.square") }
+            Button { UIPasteboard.general.string = euro(m.imp) } label: { Label("Copia l'importo", systemImage: "doc.on.doc") }
+            Button(role: .destructive) { fin("dati.eliminaMovimento", m.id) } label: { Label("Elimina", systemImage: "trash") }
+        }
     }
 
     private func etichetta(_ t: String, _ c: Color) -> some View {
@@ -1023,7 +1032,7 @@ struct FoglioMovimento: View {
             Group {
                 if inLista, let attesa = inAttesa { faseLista(attesa) } else { modulo }
             }
-            .navigationTitle(inLista ? "Era in lista?" : nuovo ? "Nuovo movimento" : "Modifica")
+            .navigationTitle(inLista ? "Era in lista?" : !nuovo ? "Modifica" : tipo == "out" ? "Nuova uscita" : tipo == "in" ? "Nuova entrata" : "Nuovo movimento")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Annulla") { chiudi() } } }
         }
@@ -1044,6 +1053,9 @@ struct FoglioMovimento: View {
         }
         testo = testoDa(b.imp.d)
         fuoco = true
+        // (mentre il foglio sta ancora salendo il fuoco non attacca: si ripete appena è su,
+        // così la tastiera dei numeri c'è sempre, anche arrivando da un widget)
+        if nuovo { DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { fuoco = true } }
     }
 
     private var modulo: some View {
@@ -1163,20 +1175,29 @@ struct FoglioMovimento: View {
                 }
             }
             .environment(\.timeZone, Tempo.roma)
-            Section {
-                if tipo == "out" {
-                    HStack(spacing: 8) {
-                        PulsantePieno(testo: "Ordinaria", colore: accentoFinanze) { salva(false) }.disabled(!valido).opacity(valido ? 1 : 0.4)
-                        PulsantePieno(testo: "Straordinaria", colore: Color(hex: "#FF9F0A").opacity(0.8)) { salva(true) }.disabled(!valido).opacity(valido ? 1 : 0.4)
-                    }
-                    Text("Ordinaria: capita spesso, conta nel budget. Straordinaria: una volta tanto, fuori dal budget.").font(.caption).foregroundStyle(Color.secondarioLife)
-                } else {
-                    PulsantePieno(testo: "Salva", colore: accentoFinanze) { salva(false) }.disabled(!valido).opacity(valido ? 1 : 0.4)
+            if tipo == "out" {
+                Section {} footer: {
+                    Text("Ordinaria: capita spesso, conta nel budget. Straordinaria: una volta tanto, fuori dal budget.")
                 }
             }
-            .listRowBackground(Color.clear)
         }
         .environment(\.timeZone, Tempo.roma)
+        // Salva sta sempre a portata di dito, sopra la tastiera: prima era in fondo al modulo, nascosto
+        .safeAreaInset(edge: .bottom) {
+            HStack(spacing: 8) {
+                if tipo == "out" {
+                    PulsantePieno(testo: "Ordinaria", colore: accentoFinanze) { salva(false) }
+                    PulsantePieno(testo: "Straordinaria", colore: Color(hex: "#FF9F0A").opacity(0.8)) { salva(true) }
+                } else {
+                    PulsantePieno(testo: "Salva", colore: accentoFinanze) { salva(false) }
+                }
+            }
+            .disabled(!valido)
+            .opacity(valido ? 1 : 0.4)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+            .background(.bar)
+        }
     }
 
     private func ordineTipo(_ k: String) -> Int { ["out", "in", "rimb", "reso", "giro", "extra"].firstIndex(of: k) ?? 9 }

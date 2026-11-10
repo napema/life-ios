@@ -31,12 +31,20 @@ struct LifeApp: App {
             .onOpenURL { url in
                 if rete.connesso || demo != nil { Instradatore.s.apri(url: url) }
             }
+            // I pulsanti dei widget (Uscita, Entrata, Nuovo task) arrivano da qui
+            .onAppear {
+                LinkLife.gestore = { url in
+                    if Rete.s.connesso || ProcessInfo.processInfo.environment["LIFE_DEMO"] != nil { Instradatore.s.apri(url: url) }
+                }
+                if let u = LinkLife.prendiInAttesa() { LinkLife.gestore?(u) }
+            }
             .preferredColorScheme(preferenze.aspetto == "light" ? .light : preferenze.aspetto == "dark" ? .dark : nil)
             .tint(.accentoLife)
         }
         .onChange(of: fase) { _, nuova in
             switch nuova {
             case .active:
+                if let u = LinkLife.prendiInAttesa() { LinkLife.gestore?(u) }
                 Logica.s.visibile(true)
                 Logica.s.battito()
                 Archivio.s.segnaEventiSporchi()
@@ -84,7 +92,9 @@ struct Radice: View {
     @ObservedObject private var logica = Logica.s
     @ObservedObject private var notifiche = Notifiche.s
     @ObservedObject private var instradatore = Instradatore.s
+    @ObservedObject private var fogli = Fogli.s
     @Namespace private var zoom
+    @State private var editorEvento: NuovoEventoBersaglio?
     @State private var scheda = "oggi"
     @State private var impostazioni = false
     @State private var anteprimaWidget = false
@@ -134,6 +144,24 @@ struct Radice: View {
             NavigationStack { VistaImpostazioni() }
         }
         .sheet(isPresented: $anteprimaWidget) { AnteprimaWidget() }
+        // I collegamenti (widget, notifiche) aprono subito il loro foglio, qui sulla Home. Se è aperta
+        // una mini-app li mostra lei, che sta sopra: per questo qui valgono solo quando non ce n'è.
+        .sheet(item: seFuori($instradatore.task)) { t in SchedaTask(idTask: t.id) }
+        .sheet(isPresented: Binding(get: { instradatore.aperta == nil && instradatore.nuovoTask }, set: { instradatore.nuovoTask = $0 })) { NuovoTask(contesto: [:]) }
+        .sheet(item: seFuori($instradatore.evento)) { link in
+            EventoDaLink(link: link) { id in
+                instradatore.evento = nil
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { editorEvento = NuovoEventoBersaglio(idEvento: id) }
+            }
+            .presentationDetents([.medium, .large])
+        }
+        .sheet(item: $editorEvento) { b in EditorEvento(bersaglio: b) }
+        .sheet(item: seFuori($fogli.aperto)) { f in FoglioFinanzeVista(foglio: f) }
+        .onReceive(instradatore.$movimento) { tipo in
+            guard let tipo, instradatore.aperta == nil else { return }
+            instradatore.movimento = nil
+            fogli.apri(.movimento(nil, tipo, nil))
+        }
         .onChange(of: notifiche.daAprire) { _, apri in
             guard let apri else { return }
             notifiche.daAprire = nil
@@ -150,6 +178,10 @@ struct Radice: View {
             Task { await AggiornaLogica.controlla() }
         }
         .task { await AggiornaLogica.controlla() }
+    }
+
+    private func seFuori<T>(_ b: Binding<T?>) -> Binding<T?> {
+        Binding(get: { instradatore.aperta == nil ? b.wrappedValue : nil }, set: { b.wrappedValue = $0 })
     }
 
     /// Quello che conta adesso, sopra la barra: la cosa in ritardo o il prossimo evento di oggi.

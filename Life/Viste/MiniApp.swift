@@ -36,21 +36,51 @@ final class Instradatore: ObservableObject {
         switch url.host() ?? "" {
         case "todo": apri(.todo)
         case "calendario": apri(.calendario)
+        // Task, eventi e movimenti si aprono dove sei, come fogli: niente giro per la mini-app.
+        // (Prima si apriva la mini-app e poi il foglio sopra: da un widget sfilavano più schermate.)
         case "nuovo-task":
-            apri(.todo)
             nuovoTask = true
         case "task":
-            apri(.todo)
-            if let id = parti.first { task = LinkTask(id: id) }
+            if let id = parti.first { task = LinkTask(id: id) } else { apri(.todo) }
         case "evento":
-            apri(.calendario)
-            if let id = parti.first { evento = LinkEvento(id: id, giorno: parti.count > 1 ? parti[1] : Tempo.oggi()) }
+            if let id = parti.first {
+                let giorno = parti.count > 1 ? parti[1] : Tempo.oggi()
+                StatoCalendario.s.ancora = giorno
+                evento = LinkEvento(id: id, giorno: giorno)
+            } else {
+                apri(.calendario)
+            }
         case "finanze":
-            apri(Modulo.di("finanze") ?? .todo)
             movimento = parti.first == "entrata" ? "in" : "out"
         case "modulo":
             if let id = parti.first, let m = Modulo.di(id) { apri(m) }
         default: break
+        }
+    }
+}
+
+/// L'evento di un collegamento (widget, notifica). All'avvio a freddo i dati possono non esserci
+/// ancora: si aspetta che arrivino invece di mostrare un foglio vuoto.
+struct EventoDaLink: View {
+    let link: Instradatore.LinkEvento
+    let modifica: (String) -> Void
+    @ObservedObject private var archivio = Archivio.s
+    @State private var scaduto = false
+
+    var body: some View {
+        let _ = archivio.versione
+        let (da, a) = Tempo.intervallo(link.giorno)
+        if let e = Azioni.eventi(da: da, a: a).first(where: { $0.id.t == link.id || $0.own_event_id.t == link.id }) {
+            DettaglioEvento(evento: e, modifica: modifica)
+        } else if scaduto {
+            ContentUnavailableView("Evento non trovato", systemImage: "calendar.badge.exclamationmark", description: Text("Forse è stato spostato o cancellato."))
+        } else {
+            ProgressView()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .task {
+                    try? await Task.sleep(for: .seconds(4))
+                    scaduto = true
+                }
         }
     }
 }
@@ -158,37 +188,28 @@ struct MiniApp: View {
         Group {
             switch modulo.id {
             case "calendario": calendario
-            case "finanze":
-                schedeApp
-                    .sheet(item: $fogli.aperto) { f in FoglioFinanzeVista(foglio: f) }
-                    .onReceive(instradatore.$movimento) { tipo in
-                        guard let tipo else { return }
-                        instradatore.movimento = nil
-                        fogli.apri(.movimento(nil, tipo, nil))
-                    }
             default: schedeApp
             }
         }
         .tint(Color(hex: modulo.colore))
         .modifier(StratoAvvisi())
+        // I fogli dei collegamenti (widget, notifiche) valgono in ogni mini-app: anche Uscita/Entrata
+        .sheet(item: $fogli.aperto) { f in FoglioFinanzeVista(foglio: f) }
+        .onReceive(instradatore.$movimento) { tipo in
+            guard let tipo else { return }
+            instradatore.movimento = nil
+            fogli.apri(.movimento(nil, tipo, nil))
+        }
         .sheet(item: $instradatore.task) { t in SchedaTask(idTask: t.id) }
         .sheet(isPresented: $instradatore.nuovoTask) { NuovoTask(contesto: [:]) }
         .sheet(item: $instradatore.evento) { link in
-            if let e = trova(link) {
-                DettaglioEvento(evento: e) { id in
-                    instradatore.evento = nil
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { editorEvento = NuovoEventoBersaglio(idEvento: id) }
-                }
-                .presentationDetents([.medium, .large])
+            EventoDaLink(link: link) { id in
+                instradatore.evento = nil
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { editorEvento = NuovoEventoBersaglio(idEvento: id) }
             }
+            .presentationDetents([.medium, .large])
         }
         .sheet(item: $editorEvento) { b in EditorEvento(bersaglio: b) }
-    }
-
-    private func trova(_ link: Instradatore.LinkEvento) -> J? {
-        let (da, a) = Tempo.intervallo(link.giorno)
-        StatoCalendario.s.ancora = link.giorno
-        return Azioni.eventi(da: da, a: a).first { $0.id.t == link.id || $0.own_event_id.t == link.id }
     }
 
     private var schedeApp: some View {

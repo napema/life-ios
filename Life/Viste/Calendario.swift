@@ -76,6 +76,32 @@ struct NuovoEventoBersaglio: Identifiable {
 
 // MARK: - Dettaglio
 
+/// Il menu che esce tenendo premuto un evento (griglia, mese, liste).
+struct MenuEvento: View {
+    let e: J
+    var apri: (() -> Void)? = nil
+
+    var body: some View {
+        let proprio = e.own_event_id.str
+        let singolo = proprio != nil && !e.id.t.contains("@")
+        Button {
+            if let apri { apri() } else { Instradatore.s.evento = Instradatore.LinkEvento(id: e.id.t, giorno: Tempo.dataRoma(e.start_at.str) ?? Tempo.oggi()) }
+        } label: { Label("Apri", systemImage: "arrow.up.forward.square") }
+        Button { UIPasteboard.general.string = e.summary.t } label: { Label("Copia il titolo", systemImage: "doc.on.doc") }
+        if !e.location.t.isEmpty {
+            Button { UIPasteboard.general.string = e.location.t } label: { Label("Copia il luogo", systemImage: "mappin.and.ellipse") }
+        }
+        if let id = proprio {
+            Button { Azioni.duplicaEvento(id) } label: { Label("Duplica", systemImage: "plus.square.on.square") }
+            if singolo {
+                Button { Azioni.spostaEvento(id, giorni: 1) } label: { Label("Un giorno dopo", systemImage: "sunrise") }
+                Button { Azioni.spostaEvento(id, giorni: 7) } label: { Label("Una settimana dopo", systemImage: "calendar.badge.plus") }
+            }
+            Button(role: .destructive) { Azioni.eliminaEvento(id) } label: { Label(singolo ? "Elimina" : "Elimina tutta la serie", systemImage: "trash") }
+        }
+    }
+}
+
 struct DettaglioEvento: View {
     let evento: J
     let modifica: (String) -> Void

@@ -240,6 +240,11 @@ struct VistaCalendario: View {
                 EtichettaBlocchi()
             }
         }
+        .overlay(alignment: .bottom) {
+            if modo != "month", preferenze.modoCalendario == modo {
+                BarraBloccoScelto { aperto = EventoAperto(evento: $0) }
+            }
+        }
         .navigationTitle(titolo)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -510,6 +515,9 @@ private struct ColonnaGiorno: View {
                         tocco()
                         apriEvento(e)
                     }
+                    // Tenendo premuto: chi si sposta col dito ha la barra delle azioni (BarraBloccoScelto),
+                    // gli altri (lezioni, calendari esterni, ricorrenti) il menu di sistema
+                    .menuEvento(e, se: !eventoSpostabile(e)) { apriEvento(e) }
                     .matchedTransitionSource(id: e.id.t, in: zoom)
             }
         } else if let t = b.task {
@@ -519,6 +527,59 @@ private struct ColonnaGiorno: View {
                     .onTapGesture { apriTask(t) }
             }
         }
+    }
+}
+
+/// Si può spostare col dito: un evento tuo, non ricorrente, dentro una sola giornata.
+private func eventoSpostabile(_ e: J) -> Bool {
+    guard !e.own_event_id.isNull, !e.id.t.contains("@"), !e.all_day.vero, let f = Tempo.data(e.end_at.str) else { return false }
+    return Tempo.dataRoma(e.start_at.str) == Tempo.dataRoma(f.addingTimeInterval(-1))
+}
+
+private extension View {
+    @ViewBuilder
+    func menuEvento(_ e: J, se attivo: Bool, apri: @escaping () -> Void) -> some View {
+        if attivo { contextMenu { MenuEvento(e: e, apri: apri) } } else { self }
+    }
+}
+
+/// Con un blocco selezionato (tieni premuto e lascia): le sue azioni, in una barra di vetro in basso.
+private struct BarraBloccoScelto: View {
+    let apri: (J) -> Void
+    @ObservedObject private var t = Trascinamento.s
+
+    var body: some View {
+        if t.selezionata, let e = t.presa?.evento, let id = e.own_event_id.str {
+            HStack(spacing: 2) {
+                voce("Apri", "arrow.up.forward.square") { apri(e) }
+                voce("Duplica", "plus.square.on.square") { Azioni.duplicaEvento(id) }
+                voce("+1 giorno", "sunrise") { Azioni.spostaEvento(id, giorni: 1) }
+                voce("Elimina", "trash", rosso: true) { Azioni.eliminaEvento(id) }
+                voce("Fine", "xmark") {}
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
+            .glassEffect(.regular.interactive(), in: .capsule)
+            .padding(.bottom, 10)
+            .accessibilityIdentifier("calendario.azioni")
+        }
+    }
+
+    private func voce(_ titolo: String, _ icona: String, rosso: Bool = false, _ fai: @escaping () -> Void) -> some View {
+        Button {
+            tocco()
+            ControlloreDito.ultimo?.lascia()
+            fai()
+        } label: {
+            VStack(spacing: 2) {
+                Image(systemName: icona).font(.system(size: 17, weight: .medium))
+                Text(titolo).font(.caption2)
+            }
+            .frame(width: 60, height: 44)
+            .foregroundStyle(rosso ? Color.pericoloLife : Color.primary)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 }
 
@@ -1298,6 +1359,9 @@ private struct RigaIntera: View {
             .opacity(task?.completed_at.isNull == false ? 0.5 : 1)
         }
         .buttonStyle(.plain)
+        .contextMenu {
+            if let e = v.evento { MenuEvento(e: e) { apriEvento(e) } }
+        }
     }
 }
 
@@ -1479,5 +1543,6 @@ private struct VistaMese: View {
             Spacer()
         }
         .contentShape(Rectangle())
+        .contextMenu { MenuEvento(e: e) }
     }
 }

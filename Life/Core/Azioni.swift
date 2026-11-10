@@ -542,6 +542,21 @@ enum Azioni {
         }
     }
 
+    /// Una copia dell'evento, alla stessa ora (dal menu contestuale).
+    static func duplicaEvento(_ id: String) {
+        guard let e = a.riga("events", id) else { return }
+        var valori = e.dict
+        valori.removeValue(forKey: "id")
+        salvaEvento(id: nil, valori: valori, minutiPromemoria: promemoria(evento: id).compactMap { $0.offset_minutes.int })
+    }
+
+    /// Sposta l'evento di qualche giorno, alla stessa ora.
+    static func spostaEvento(_ id: String, giorni: Int) {
+        guard let e = a.riga("events", id), let inizio = Tempo.data(e.start_at.str), let fine = Tempo.data(e.end_at.str) else { return }
+        let salto = Double(giorni) * 86_400
+        salvaEvento(id: id, valori: ["start_at": .str(Tempo.iso(inizio.addingTimeInterval(salto))), "end_at": .str(Tempo.iso(fine.addingTimeInterval(salto)))], minutiPromemoria: promemoria(evento: id).compactMap { $0.offset_minutes.int })
+    }
+
     static func eliminaEvento(_ id: String) {
         aggiornaRiga("events", id, ["deleted_at": adesso()])
         let nome = a.riga("events", id)?.title.t ?? "Evento"

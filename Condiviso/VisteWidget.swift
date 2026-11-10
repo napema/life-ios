@@ -19,6 +19,26 @@ struct CompletaTaskIntent: AppIntent {
     }
 }
 
+/// Un pulsante di un widget che apre Life su una sua schermata (Uscita, Entrata, Nuovo task).
+/// Prima c'era OpenURLIntent, che accetta solo indirizzi web: con life:// non succedeva niente.
+struct ApriLifeIntent: AppIntent {
+    static var title: LocalizedStringResource = "Apri Life"
+    static var isDiscoverable = false
+    static var openAppWhenRun = true
+
+    @Parameter(title: "Destinazione")
+    var destinazione: String
+
+    init() {}
+    init(_ url: URL) { destinazione = url.absoluteString }
+
+    @MainActor
+    func perform() async throws -> some IntentResult {
+        if let u = URL(string: destinazione) { LinkLife.arrivato(u) }
+        return .result()
+    }
+}
+
 private func coloreWidget(_ hex: String?, _ riserva: Color = .gray) -> Color {
     guard var s = hex, s.hasPrefix("#"), s.count == 7 else { return riserva }
     s.removeFirst()
@@ -377,7 +397,7 @@ struct VistaFinanzeWidget: View {
     }
 
     private func pulsante(_ t: String, _ icona: String, _ c: Color, _ url: URL) -> some View {
-        Button(intent: OpenURLIntent(url)) {
+        Button(intent: ApriLifeIntent(url)) {
             Label(t, systemImage: icona)
                 .font(.system(size: 17, weight: .bold, design: .rounded))
                 .foregroundStyle(.white)

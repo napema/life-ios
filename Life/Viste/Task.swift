@@ -285,6 +285,8 @@ struct RigaEventoLista: View {
                 .font(.caption).monospacedDigit().foregroundStyle(Color.secondarioLife)
             Text(evento.summary.t.isEmpty ? "(senza titolo)" : evento.summary.t).font(.subheadline).foregroundStyle(Color.secondarioLife).lineLimit(1)
         }
+        .contentShape(Rectangle())
+        .contextMenu { MenuEvento(e: evento) }
         .listRowSeparator(.hidden)
     }
 }

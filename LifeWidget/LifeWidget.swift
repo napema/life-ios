@@ -127,7 +127,7 @@ struct WidgetBloccoTodo: Widget {
 struct ControlloNuovoTask: ControlWidget {
     var body: some ControlWidgetConfiguration {
         StaticControlConfiguration(kind: "life.controllo.nuovotask") {
-            ControlWidgetButton(action: OpenURLIntent(LinkLife.nuovoTask)) {
+            ControlWidgetButton(action: ApriLifeIntent(LinkLife.nuovoTask)) {
                 Label("Nuovo task", systemImage: "plus.circle")
             }
         }
