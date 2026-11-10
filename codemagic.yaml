@@ -1,0 +1,51 @@
+# Compila Life su un Mac di Codemagic (gratis: 500 minuti al mese), come .github/workflows/compila.yml.
+# Serve finché GitHub Actions è fermo. Qui solo l'IPA non firmato (lo firma iLoader): niente simulatore
+# né prove col dito, per restare in pochi minuti a giro.
+workflows:
+  compila:
+    name: Compila Life
+    instance_type: mac_mini_m2
+    max_build_duration: 30
+    environment:
+      xcode: latest
+    triggering:
+      events:
+        - push
+      branch_patterns:
+        - pattern: main
+          include: true
+      cancel_previous_builds: true
+    # La sola logica arriva ai telefoni da sé: non serve un'IPA nuova
+    when:
+      changeset:
+        excludes:
+          - Life/Risorse/logica.js
+          - logica/**
+          - README.md
+    scripts:
+      - name: Strumenti
+        script: |
+          brew install xcodegen
+          xcodebuild -version
+          xcodegen generate
+      - name: Compila per iPhone
+        script: |
+          set -o pipefail
+          xcodebuild -project Life.xcodeproj -scheme Life -configuration Release -sdk iphoneos \
+            -destination 'generic/platform=iOS' -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            build 2>&1 | tee build.log | { grep -E "error:|warning: unre|BUILD|\*\*" || true; }
+          test -x build/Build/Products/Release-iphoneos/Life.app/Life
+      - name: Crea l'IPA
+        script: |
+          mkdir -p Payload
+          cp -R build/Build/Products/Release-iphoneos/Life.app Payload/
+          zip -qry Life.ipa Payload
+          # La riserva, se chi firma non accetta l'estensione dei widget
+          rm -rf Payload/Life.app/PlugIns
+          zip -qry Life-senza-widget.ipa Payload
+          ls -lh Life.ipa Life-senza-widget.ipa
+    artifacts:
+      - Life.ipa
+      - Life-senza-widget.ipa
+      - build.log
