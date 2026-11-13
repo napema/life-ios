@@ -330,20 +330,8 @@ struct Riepilogo: View {
                         rigaElenco(data: gg(v.quando.t), nome: v.nome.t, nota: "\(nomePocket(v.pocket.str)) · \(scoperto ? "manca \(euro(cop.scoperto, tondo: true))" : "coperto")", notaMale: scoperto, cifra: euro(v.importo)) { fogli.apri(.arrivo(v)) }
                     }
                 }
+                // Lo stipendio e il giorno di paga: una riga sola, che separa prima e dopo
                 if !stipendio.dovuto.vero { rigaStipendio(stipendio) }
-                Button { fogli.apri(.paga(paga, nil)) } label: {
-                    HStack {
-                        Text(gg(paga)).frame(width: 54, alignment: .leading).monospacedDigit()
-                        Text("GIORNO DI PAGA")
-                        Spacer()
-                        Image(systemName: "chevron.right")
-                    }
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(accentoFinanze)
-                    .padding(8)
-                    .background(accentoFinanze.opacity(0.1), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                }
-                .buttonStyle(.plain)
                 ForEach(dopo, id: \.self) { v in
                     rigaElenco(data: gg(v.quando.t), nome: v.nome.t, nota: v.entrata.vero ? "su \(nomePocket(v.pocket.str)) · in entrata" : nil, cifra: "\(v.entrata.vero ? "+" : "")\(euro(v.importo))", smorzata: !v.entrata.vero) { fogli.apri(.arrivo(v)) }
                 }
@@ -376,10 +364,26 @@ struct Riepilogo: View {
         .background(Color(uiColor: .tertiarySystemFill), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 
+    /// Lo stipendio E il giorno di paga, una riga sola (prima erano due nello stesso giorno).
     private func rigaStipendio(_ s: J) -> some View {
         let fra = s.fra.int ?? 0
         let quando = fra == 0 ? "oggi" : fra == 1 ? "domani" : fra < 0 ? (fra == -1 ? "ieri" : "\(-fra) giorni fa") : "fra \(fra) giorni"
-        return rigaElenco(data: gg(s.data.t), nome: "Stipendio", nota: s.dovuto.vero ? "\(quando) · da aggiungere" : "su Principale · in entrata", notaMale: fra < 0, cifra: "+\(euro(s.importo))", coloreCifra: verdeEntrata) { fogli.apri(.stipendio) }
+        return Button { fogli.apri(.stipendio) } label: {
+            HStack(spacing: 10) {
+                Text(gg(s.data.t)).font(.caption.weight(.semibold)).monospacedDigit().foregroundStyle(verdeEntrata).frame(width: 54, alignment: .leading)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Stipendio · giorno di paga").font(.subheadline.weight(.semibold))
+                    Text("\(quando)\(s.dovuto.vero ? " · da aggiungere" : " · su Principale")\(s.soloQuesto.vero ? " · importo di questo mese" : "")")
+                        .font(.caption).foregroundStyle(fra < 0 ? Color.pericoloLife : Color.secondarioLife)
+                }
+                Spacer(minLength: 6)
+                Text("+\(euro(s.importo))").font(.subheadline.weight(.semibold)).monospacedDigit().foregroundStyle(verdeEntrata)
+            }
+            .padding(8)
+            .background(verdeEntrata.opacity(0.11), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 
     private func bloccoCuscinetto(_ c: J, _ oggi: String) -> some View {

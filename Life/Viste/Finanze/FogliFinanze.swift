@@ -1178,32 +1178,64 @@ struct FoglioStipendio: View {
                 .listRowBackground(Color.clear)
                 Section {
                     CampoEuro(etichetta: "Importo", testo: $testo)
+                    if cambiato {
+                        Button {
+                            // Solo questo stipendio: il prossimo torna all'importo di sempre
+                            fin("ponte.meta", ["config", "importiStipendio", s.data], imp == Int(s.solito.d) ? nil : .n(imp))
+                            avviso("Stipendio di questo mese: \(euro(Double(imp)))")
+                        } label: {
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text("Solo per questo mese")
+                                Text("\(umana) · poi torna \(euro(s.solito))").font(.caption).foregroundStyle(Color.secondarioLife)
+                            }
+                        }
+                        Button {
+                            fin("ponte.meta", ["config", "importoStipendio"], .n(imp))
+                            fin("ponte.meta", ["config", "importiStipendio", s.data], nil)
+                            avviso("Stipendio da ora in poi: \(euro(Double(imp)))")
+                        } label: {
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text("Da ora in poi")
+                                Text("diventa l'importo di sempre").font(.caption).foregroundStyle(Color.secondarioLife)
+                            }
+                        }
+                    } else if s.soloQuesto.vero {
+                        Button("Torna a \(euro(s.solito))") {
+                            fin("ponte.meta", ["config", "importiStipendio", s.data], nil)
+                            testo = testoDa(s.solito.d)
+                        }
+                    }
+                } header: {
+                    Text("Quanto arriva")
                 } footer: {
-                    Text("L'importo atteso resta per i prossimi stipendi: cambialo qui quando cambia la busta paga.")
+                    Text(s.soloQuesto.vero ? "Questo mese \(euro(s.importo)); dal prossimo torna \(euro(s.solito))." : "Di solito \(euro(s.solito)). La busta paga cambia? Mettilo solo per questo mese, o da ora in poi.")
                 }
                 Section {
                     LabeledContent("Entra su", value: "Principale")
                     LabeledContent("Data prevista", value: umana)
+                    Button { Fogli.s.apri(.paga(s.data.t, nil)) } label: {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text("I travasi del giorno di paga").foregroundStyle(Color.primary)
+                                Text("dove va lo stipendio, da spuntare").font(.caption).foregroundStyle(Color.secondarioLife)
+                            }
+                            Spacer()
+                            Image(systemName: "chevron.right").font(.caption.weight(.semibold)).foregroundStyle(Color.secondarioLife)
+                        }
+                    }
                 }
                 Section {
-                    Button("Aggiungi lo stipendio") {
+                    Button("È arrivato: aggiungilo") {
                         guard imp > 0 else { return avviso("Serve un importo.", errore: true) }
                         let oggi = Logica.s.chiama("ui.oggiISO")
                         // Arrivato in anticipo o in ritardo: la data vera è oggi, ed è da lì che parte il ciclo
                         fin("dati.salvaMovimento", ["id": .str(nuovoIdLogica("m")), "data": oggi, "tipo": "in", "imp": .n(imp), "nota": "Stipendio", "cat": nil, "sub": nil, "pocket": "principale", "ecc": false, "stip": true])
-                        if cambiato { fin("ponte.meta", ["config", "importoStipendio"], .n(imp)) }
                         celebra("Stipendio")
                         Fogli.s.apri(.paga(oggi.t, Double(imp)))
                     }
                     .fontWeight(.semibold)
-                    if cambiato {
-                        Button("Salva solo il nuovo importo") {
-                            fin("ponte.meta", ["config", "importoStipendio"], .n(imp))
-                            avviso("Importo atteso: \(euro(Double(imp)))")
-                        }
-                    }
                 } footer: {
-                    Text("Registra l'entrata di oggi sul Principale, marcata come stipendio (il ciclo parte da qui), e apre i travasi del giorno di paga.")
+                    Text("Registra l'entrata di oggi sul Principale, marcata come stipendio (il ciclo parte da qui), e apre i travasi.")
                 }
             }
         }
@@ -1646,7 +1678,6 @@ struct ImpostazioniFinanze: View {
         let prev = (fin("dati.previsti").list + fin("dati.entratePreviste").list).sorted { $0.quando.t < $1.quando.t }
         let regole = s.rules.dict.count
         let ultimo = fin("calcolo.ultimoStipendio", iso)
-        let prossimo = fin("calcolo.prossimoStipendio", iso)
         let cfg = fin("dati.statoConfig", ultimo)
         let obi = fin("piano.statoObiettivo", iso)
         let cus = fin("piano.cuscinetto", iso)
@@ -1664,9 +1695,8 @@ struct ImpostazioniFinanze: View {
         }
 
         return VStack(alignment: .leading, spacing: 16) {
-            Sezione("Configurazione", coda: { Text(cfg.bloccata.vero ? "bloccata" : cfg.perche.t == "finestra" ? "libera" : "sbloccata").foregroundStyle(cfg.bloccata.vero ? Color.pericoloLife : Color.successoLife) }) {
+            Sezione("Blocco delle impostazioni", coda: { Text(cfg.bloccata.vero ? "bloccata" : cfg.perche.t == "finestra" ? "libera" : "sbloccata").foregroundStyle(cfg.bloccata.vero ? Color.pericoloLife : Color.successoLife) }) {
                 Carta(padding: 12) {
-                    RigaFin(titolo: "Ultimo stipendio", sotto: "il prossimo il \(dataBreve(prossimo.t))", valore: dataBreve(ultimo.t))
                     if cfg.bloccata.vero {
                         HStack {
                             TextField("Perché la stai cambiando?", text: $motivo)
@@ -1737,11 +1767,15 @@ struct ImpostazioniFinanze: View {
                 }
             }
 
-            Sezione("Il ciclo dello stipendio") {
+            Sezione("Stipendio") {
                 Carta(padding: 12) {
-                    Stepper("Giorno dello stipendio: \(giorno)", value: Binding(get: { giorno }, set: { n in protetto { fin("ponte.meta", ["config", "giornoStipendio"], .n(min(28, max(1, n)))) } }), in: 1...28).font(.subheadline)
-                    RigaFin(titolo: "Prossimo stipendio", valore: dataBreve(prossimo.t))
-                    RigaFin(titolo: "Ciclo in corso", valore: fin("calcolo.nomeCiclo", c).t)
+                    let stip = fin("stipendio.stipendioAtteso", iso)
+                    RigaFin(titolo: "Il prossimo", sotto: "\(dataBreve(stip.data.t)) · tocca per cambiare l'importo", valore: "+\(euro(stip.importo))", coloreValore: verdeEntrata, freccia: true) { f.apri(.stipendio) }
+                    RigaFin(titolo: "Di solito", valore: euro(stip.solito))
+                    Stepper("Arriva il giorno \(giorno)", value: Binding(get: { giorno }, set: { n in protetto { fin("ponte.meta", ["config", "giornoStipendio"], .n(min(28, max(1, n)))) } }), in: 1...28).font(.subheadline)
+                    RigaFin(titolo: "L'ultimo", valore: dataBreve(ultimo.t))
+                    Text("Il mese di Finanze va da uno stipendio all'altro (ora: \(fin("calcolo.nomeCiclo", c).t)). Se il giorno cade di sabato o domenica arriva il venerdì prima; se arriva un altro giorno, conta il giorno in cui lo aggiungi.")
+                        .font(.caption).foregroundStyle(Color.secondarioLife)
                 }
             }
 
