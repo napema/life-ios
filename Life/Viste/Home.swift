@@ -68,6 +68,7 @@ struct Home: View {
         let abi = carte.abitudini
         let tra = carte.allenamenti
         let mob = carte.mobilita
+        let rnk = carte.rank
         let gettoni = (abi.gettoni.isNull ? abi.giornata : abi.gettoni).list.sorted { ($0.ora.str ?? "99") < ($1.ora.str ?? "99") }
         let fatteAbi = gettoni.filter { $0.fatta.vero || $0.saltata.vero }.count
 
@@ -84,6 +85,7 @@ struct Home: View {
                     widgetPasti(oggi, oraMin)
                     if !tra.isNull { widgetSemplice("allenamenti", valore: tra.valore.t, sotto: tra.dettaglio.t) }
                     if !mob.isNull { widgetSemplice("mobilita", valore: mob.valore.t, sotto: mob.dettaglio.t, colore: mob.fatto.vero ? .successoLife : nil) }
+                    if !rnk.isNull { widgetSemplice("rank", valore: rnk.valore.t, sotto: [rnk.prova.t, rnk.dettaglio.t].filter { !$0.isEmpty }.joined(separator: " · "), colore: rnk.urgente.vero ? .pericoloLife : nil) }
                 }
 
                 widgetTodo(tasks)

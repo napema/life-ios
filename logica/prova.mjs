@@ -99,5 +99,15 @@ prova('sezione: messaggio', () => {
   return m.split(String.fromCharCode(10)).slice(9, 11);
 });
 
+prova('rank: prova fisica col voto, senza tempo', () => {
+  const d = chiama('rank.dati.provaVuota', 'fisica');
+  chiama('rank.dati.salvaProva', { ...d, titolo: 'Valutazione 5km', data: '2026-10-01' });
+  chiama('rank.registra', d.id, 27, '');
+  const q = chiama('rank.quadro');
+  if (q.fisiche.media !== 27 || !q.ciSonoFisiche) throw new Error(JSON.stringify(q.fisiche));
+  chiama('rank.obiettivo', 27);
+  return { media: q.fisiche.media, inArrivo: q.inArrivo.length, obiettivo: chiama('rank.quadro').obiettivo };
+});
+
 console.log(errori ? `${errori} prove fallite` : 'tutte le prove passate');
 process.exit(errori ? 1 : 0);

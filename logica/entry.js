@@ -35,6 +35,7 @@ import * as pastiDati from '@atlas/pasti/dati.js';
 import * as pastiImporta from '@atlas/pasti/importa.js';
 import * as pastiPiano from '@atlas/pasti/piano.js';
 import * as sezioneDati from '../../src/atlas/moduli/sezione/dati';
+import * as rank from './shim/rank.js';
 
 import * as ui from '../../src/atlas/core/ui';
 import { ascolta, EVENTI } from '../../src/atlas/core/bus';
@@ -157,6 +158,7 @@ const L = {
     dati: mobilitaDati, esercizi: mobilitaEsercizi, ponte: mobilitaPonte, sessione: mobilitaSessione },
   pasti: { calcolo: pastiCalcolo, dati: pastiDati, importa: pastiImporta, piano: pastiPiano },
   sezione: { dati: sezioneDati },
+  rank,
 };
 globalThis.Logica = L;
 

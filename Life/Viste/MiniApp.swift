@@ -173,6 +173,11 @@ struct MiniApp: View {
                 SchedaApp(id: "appunti", titolo: "Appunti", icona: "note.text"),
                 altro,
             ]
+        case "rank":
+            return [
+                SchedaApp(id: "quadro", titolo: "Rank", icona: "chart.line.uptrend.xyaxis"),
+                SchedaApp(id: "prove", titolo: "Prove", icona: "list.bullet"),
+            ]
         case "pasti":
             return [
                 SchedaApp(id: "oggi", titolo: "Oggi", icona: "fork.knife"),
@@ -242,6 +247,7 @@ struct MiniApp: View {
         case "mobilita": VistaMobilita(scheda: s)
         case "pasti": VistaPasti(scheda: s)
         case "sezione": VistaSezione(scheda: s)
+        case "rank": VistaRank(scheda: s)
         default: EmptyView()
         }
     }

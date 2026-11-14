@@ -49,6 +49,7 @@ struct Modulo: Identifiable, Hashable {
         Modulo(id: "mobilita", nome: "Mobilità", colore: "#30B0C7", icona: "figure.flexibility"),
         Modulo(id: "pasti", nome: "Pasti", colore: "#FF2D55", icona: "fork.knife"),
         Modulo(id: "sezione", nome: "Sezione", colore: "#A2845E", icona: "person.3.fill"),
+        Modulo(id: "rank", nome: "Rank", colore: "#FFD60A", icona: "graduationcap.fill"),
     ]
     static let tutti = elenco.filter { !inPausa.contains($0.id) }
     static let todo = Modulo(id: "todo", nome: "To do", colore: "#34C759", icona: "checkmark.square.fill")
