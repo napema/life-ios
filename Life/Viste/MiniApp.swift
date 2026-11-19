@@ -134,6 +134,8 @@ struct MiniApp: View {
     private static func schede(_ id: String) -> [SchedaApp] {
         let altro = SchedaApp(id: "altro", titolo: "Altro", icona: "slider.horizontal.3")
         switch id {
+        case "vassoio":
+            return [SchedaApp(id: "vassoio", titolo: "Vassoio", icona: "tray.and.arrow.down.fill")]
         case "todo":
             return [
                 SchedaApp(id: "oggi", titolo: "Oggi", icona: "star.fill"),
@@ -246,6 +248,7 @@ struct MiniApp: View {
         case "allenamenti": VistaTraining(scheda: s)
         case "mobilita": VistaMobilita(scheda: s)
         case "pasti": VistaPasti(scheda: s)
+        case "vassoio": VistaVassoio()
         case "sezione": VistaSezione(scheda: s)
         case "rank": VistaRank(scheda: s)
         default: EmptyView()
