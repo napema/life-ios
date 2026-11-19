@@ -51,12 +51,18 @@ struct ProvaAperta: Identifiable {
     var id: String { p.id.t }
 }
 
+struct AvanzamentoAperto: Identifiable {
+    let r: J
+    var id: String { r.id.t }
+}
+
 struct VistaRank: View {
     init(scheda: String) { self.scheda = scheda }
 
     @ObservedObject private var logica = Logica.s
     let scheda: String
     @State private var aperta: ProvaAperta?
+    @State private var avanza: AvanzamentoAperto?
 
     var body: some View {
         let _ = logica.versione
@@ -70,12 +76,14 @@ struct VistaRank: View {
         }
         .navigationTitle(scheda == "prove" ? "Prove" : "Rank")
         .sheet(item: $aperta) { a in FoglioEsito(p: a.p) }
+        .sheet(item: $avanza) { a in FoglioAvanzamento(r: a.r) }
     }
 
     // MARK: Quadro
 
     @ViewBuilder
     private func quadro(_ q: J) -> some View {
+        onTrack(q)
         prossima(q.inArrivo.list.first)
         if !q.daRegistrare.list.isEmpty {
             Sezione("Da registrare", coda: { Text("\(q.daRegistrare.list.count) senza esito") }) {
@@ -94,6 +102,44 @@ struct VistaRank: View {
             Sezione("In arrivo", coda: { Text("\(q.inArrivo.list.count) prove") }) {
                 Carta(padding: 6) {
                     ForEach(q.inArrivo.list.prefix(8), id: \.id) { p in riga(p, registra: false) }
+                }
+            }
+        }
+    }
+
+    // MARK: On track
+
+    @ViewBuilder
+    private func onTrack(_ q: J) -> some View {
+        let righe = q.ontrack.list
+        if !righe.isEmpty {
+            Sezione("On track", coda: { Text("\(righe.count) in preparazione") }) {
+                Carta {
+                    ForEach(righe, id: \.id) { r in
+                        HStack(alignment: .top, spacing: 10) {
+                            Circle().fill(Color(hex: r.colore.t)).frame(width: 10, height: 10).padding(.top, 5)
+                            VStack(alignment: .leading, spacing: 3) {
+                                HStack(spacing: 6) {
+                                    Text(r.titolo.t).font(.subheadline.weight(.semibold))
+                                    Text(r.quando.t).font(.caption).foregroundStyle(Color.secondarioLife)
+                                    Spacer()
+                                    if let s = r.nomeStato.str { Text(s).font(.caption.weight(.semibold)).foregroundStyle(Color(hex: r.colore.t)) }
+                                }
+                                Text(r.frase.t).font(.footnote)
+                                if !r.nota.t.isEmpty { Text(r.nota.t).font(.caption).foregroundStyle(Color.secondarioLife) }
+                                if r.fase.t == "lavoro" {
+                                    Button("Registra \(r.unitaTipo.str ?? "pagine")") { avanza = AvanzamentoAperto(r: r) }
+                                        .font(.footnote.weight(.semibold))
+                                        .foregroundStyle(gialloRank)
+                                        .buttonStyle(.plain)
+                                        .padding(.top, 2)
+                                }
+                            }
+                        }
+                    }
+                    ForEach(q.conflitti.list.indices, id: \.self) { i in
+                        Text(q.conflitti[i].t).font(.footnote).foregroundStyle(rossoRank)
+                    }
                 }
             }
         }
@@ -404,5 +450,46 @@ private struct FoglioEsito: View {
             }
         }
         .presentationDetents([.medium, .large])
+    }
+}
+
+/// Quante unità hai fatto oggi per una prova: un numero, Registra.
+private struct FoglioAvanzamento: View {
+    let r: J
+    @Environment(\.dismiss) private var chiudi
+    @State private var quante = 5
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 18) {
+                Text(r.frase.t).font(.subheadline).foregroundStyle(Color.secondarioLife).multilineTextAlignment(.center)
+                Text("\(quante)").font(.system(size: 64, weight: .bold)).monospacedDigit()
+                Text(r.unitaTipo.str ?? "pagine").font(.headline).foregroundStyle(Color.secondarioLife)
+                Stepper("Quante", value: $quante, in: 1...300).labelsHidden()
+                HStack(spacing: 8) {
+                    ForEach([1, 5, 10, 20], id: \.self) { n in
+                        Button("+\(n)") { quante = min(300, quante + n) }
+                            .buttonStyle(.bordered)
+                            .buttonBorderShape(.capsule)
+                    }
+                }
+                Spacer()
+            }
+            .padding(20)
+            .background(Color.sfondoLife)
+            .navigationTitle(r.titolo.t)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Annulla") { chiudi() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Registra") {
+                        rk("avanza", J.str(r.id.t), J.n(quante))
+                        UINotificationFeedbackGenerator().notificationOccurred(.success)
+                        chiudi()
+                    }
+                }
+            }
+        }
+        .presentationDetents([.medium])
     }
 }

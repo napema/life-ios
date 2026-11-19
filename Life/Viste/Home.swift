@@ -147,7 +147,12 @@ struct Home: View {
                     widgetPasti(oggi, oraMin)
                     if !tra.isNull { widgetSemplice("allenamenti", valore: tra.valore.t, sotto: tra.dettaglio.t) }
                     if !mob.isNull { widgetSemplice("mobilita", valore: mob.valore.t, sotto: mob.dettaglio.t, colore: mob.fatto.vero ? .successoLife : nil) }
-                    if !rnk.isNull { widgetSemplice("rank", valore: rnk.valore.t, sotto: [rnk.prova.t, rnk.dettaglio.t].filter { !$0.isEmpty }.joined(separator: " · "), colore: rnk.urgente.vero ? .pericoloLife : nil) }
+                    if let r = rnk.ontrack.list.first {
+                        // On track: la prova in preparazione più importante, col suo stato
+                        widgetSemplice("rank", valore: r.titolo.t, sotto: [r.quando.t, r.riga.t].filter { !$0.isEmpty }.joined(separator: " · "), colore: Color(hex: r.colore.t))
+                    } else if !rnk.isNull {
+                        widgetSemplice("rank", valore: rnk.valore.t, sotto: [rnk.prova.t, rnk.dettaglio.t].filter { !$0.isEmpty }.joined(separator: " · "), colore: rnk.urgente.vero ? .pericoloLife : nil)
+                    }
                 }
 
                 widgetTodo(tasks)

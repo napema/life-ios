@@ -54,6 +54,13 @@ final class Notifiche: NSObject, ObservableObject, UNUserNotificationCenterDeleg
                 voci.append(Voce(id: id, quando: quando, titolo: evento.title.str ?? "Evento", corpo: inizio, apri: "evento:\(e)"))
             }
         }
+        // Rank: «oggi per Rank» la mattina, il debito la sera (al massimo 2 al giorno), calcolate dalla logica
+        for n in Logica.s.chiama("rank.notifiche").list {
+            guard let id = n.id.str, let g = n.giorno.str, let o = n.ora.str else { continue }
+            let quando = Tempo.istante(g, o)
+            if quando <= adesso { continue }
+            voci.append(Voce(id: id, quando: quando, titolo: n.titolo.t, corpo: n.corpo.t, apri: "modulo:rank"))
+        }
         voci.sort { $0.quando < $1.quando }
         let scelte = voci.prefix(Self.massimo)
         let centro = UNUserNotificationCenter.current()

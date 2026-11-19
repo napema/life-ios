@@ -4,6 +4,8 @@ import * as dati from '../../../src/atlas/moduli/rank/dati';
 import * as analisi from '../../../src/atlas/moduli/rank/analisi';
 import { giornoDi } from '../../../src/atlas/moduli/rank/contratto';
 import { giornoCorrente } from '../../../src/atlas/core/contesto';
+import * as motore from '../../../src/atlas/moduli/rank/motore';
+import * as ot from '../../../src/atlas/moduli/rank/ontrack';
 
 const giorni = (a, b) => Math.round((Date.parse(b) - Date.parse(a)) / 86_400_000);
 
@@ -33,8 +35,19 @@ export function quadro() {
   const senza = lista.filter((x) => !dati.conEsito(x.p));
   const restanti = senza.filter((x) => x.p.binario !== 'fisica').length;
   const obiettivo = cfg.mediaObiettivo ?? null;
+  // On track: le prove in preparazione col loro stato, la frase, la nota e il requisito di oggi
+  const mq = motore.quadro(oggi);
+  const ontrack = mq.aperte.map((s) => ({
+    id: s.id, titolo: s.titolo, tipo: s.tipo, stato: s.stato, nomeStato: s.stato ? ot.NOMI_STATO[s.stato] : null, colore: s.stato ? ot.COLORI_STATO[s.stato] : '#8E8E93',
+    quando: ot.traGiorni(s.fraGiorni), frase: ot.frase(s), nota: ot.nota(s),
+    fase: s.tipo === 'studio' ? s.fase : null, unitaTipo: s.tipo === 'studio' ? s.unitaTipo : null,
+    richiesto: s.tipo === 'studio' ? s.richiestoOggi : null, fatteOggi: s.tipo === 'studio' ? s.fatteOggi : null, fatte: s.tipo === 'studio' ? s.fatte : null, totali: s.tipo === 'studio' ? s.totali : null,
+  }));
   return {
     oggi,
+    ontrack,
+    conflitti: mq.conflitti.map((c) => c.testo),
+    schema: mq.schema,
     daRegistrare: senza.filter((x) => x.giorno && x.giorno < oggi).map((x) => voce(x, oggi)),
     inArrivo: senza.filter((x) => !x.giorno || x.giorno >= oggi).map((x) => voce(x, oggi)),
     fatte: lista.filter((x) => dati.conEsito(x.p)).map((x) => voce(x, oggi)).reverse(),
@@ -68,4 +81,11 @@ export function registra(id, voto, tempo) {
 }
 export const obiettivo = (v) => dati.impostaConfig({ mediaObiettivo: v ?? null });
 export const mmss = analisi.mmss;
-export { dati };
+/** Un avanzamento (pagine, capitoli…) per una prova, oggi. */
+export const avanza = (id, unita) => dati.registraAvanzamento(id, Math.round(Number(unita) || 0), giornoCorrente(), 'manuale');
+/** Le notifiche di oggi e di domani (l'app le programma come promemoria locali). */
+export const notifiche = () => {
+  const oggi = giornoCorrente();
+  return [...motore.notifiche(oggi), ...motore.notifiche(ot.piu(oggi, 1))];
+};
+export { dati, ot };

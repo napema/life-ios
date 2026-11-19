@@ -121,5 +121,18 @@ prova('rank: prova fisica col voto, senza tempo', () => {
   return { media: q.fisiche.media, inArrivo: q.inArrivo.length, obiettivo: chiama('rank.quadro').obiettivo };
 });
 
+prova('rank: On track e avanzamento', () => {
+  const oggi = chiama('ui.oggiISO');
+  const d = chiama('rank.dati.provaVuota', 'accertamento');
+  const giorno = chiama('rank.ot.piu', oggi, 6);
+  chiama('rank.dati.salvaProva', { ...d, titolo: 'Prova motore', data: giorno, unitaTotali: 40, obiettivo: '30' });
+  chiama('rank.avanza', d.id, 5);
+  const r = chiama('rank.quadro').ontrack.find((x) => x.id === d.id);
+  if (!r || r.fatteOggi !== 5 || !r.frase.startsWith('Per arrivare a 30')) throw new Error(JSON.stringify(r));
+  const n = chiama('rank.notifiche');
+  if (!Array.isArray(n) || n.length > 4) throw new Error(JSON.stringify(n));
+  return { stato: r.nomeStato, oggi: `${r.fatteOggi}/${r.richiesto}`, notifiche: n.length };
+});
+
 console.log(errori ? `${errori} prove fallite` : 'tutte le prove passate');
 process.exit(errori ? 1 : 0);
