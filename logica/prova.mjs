@@ -68,6 +68,18 @@ prova('home.quadro', () => chiama('home.quadro').verdetto);
 prova('finanze: pocket', () => chiama('finanze.calcolo.pocketConSaldi').length);
 prova('finanze: ricarica', () => chiama('finanze.calcolo.finoAllaRicarica').giorni);
 prova('finanze: stipendio', () => chiama('finanze.stipendio.stipendioAtteso').importo);
+prova('finanze: il travaso segue lo stipendio aggiornato', () => {
+  const data = chiama('finanze.calcolo.prossimoStipendio', chiama('ui.oggiISO'));
+  const ultimo = (r) => r.righe[r.righe.length - 1].imp;
+  chiama('finanze.ponte.meta', ['config', 'importoStipendio'], 200000);
+  const prima = ultimo(chiama('finanze.paga.travasiPaga', data));
+  chiama('finanze.ponte.meta', ['config', 'importoStipendio'], 210000);
+  const dopo = ultimo(chiama('finanze.paga.travasiPaga', data));
+  chiama('finanze.ponte.meta', ['config', 'importiStipendio', data], 230000);
+  const soloQuesto = ultimo(chiama('finanze.paga.travasiPaga', data));
+  if (dopo - prima !== 10000 || soloQuesto - dopo !== 20000) throw new Error(`${prima} ${dopo} ${soloQuesto}`);
+  return { prima, dopo, soloQuesto };
+});
 prova('finanze: nuovo movimento', () => {
   chiama('finanze.dati.salvaMovimento', { id: 'm_prova', data: chiama('ui.oggiISO'), tipo: 'out', imp: 1250, nota: 'Prova', cat: null, sub: null, rif: null, ecc: false, pocket: 'principale', pocketTo: null });
   return chiama('finanze.dati.movimentiVivi').length;
