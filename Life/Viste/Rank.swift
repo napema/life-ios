@@ -127,8 +127,8 @@ struct VistaRank: View {
                                 }
                                 Text(r.frase.t).font(.footnote)
                                 if !r.nota.t.isEmpty { Text(r.nota.t).font(.caption).foregroundStyle(Color.secondarioLife) }
-                                if r.fase.t == "lavoro" {
-                                    Button("Registra \(r.unitaTipo.str ?? "pagine")") { avanza = AvanzamentoAperto(r: r) }
+                                if r.fase.t == "lavoro" || r.fase.t == "test" {
+                                    Button(r.fase.t == "test" ? "Registra un test" : "Registra \(r.unitaTipo.str ?? "pagine")") { avanza = AvanzamentoAperto(r: r) }
                                         .font(.footnote.weight(.semibold))
                                         .foregroundStyle(gialloRank)
                                         .buttonStyle(.plain)

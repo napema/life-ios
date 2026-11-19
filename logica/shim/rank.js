@@ -40,7 +40,7 @@ export function quadro() {
   const ontrack = mq.aperte.map((s) => ({
     id: s.id, titolo: s.titolo, tipo: s.tipo, stato: s.stato, nomeStato: s.stato ? ot.NOMI_STATO[s.stato] : null, colore: s.stato ? ot.COLORI_STATO[s.stato] : '#8E8E93',
     quando: ot.traGiorni(s.fraGiorni), frase: ot.frase(s), nota: ot.nota(s),
-    fase: s.tipo === 'studio' ? s.fase : null, unitaTipo: s.tipo === 'studio' ? s.unitaTipo : null,
+    fase: s.tipo === 'studio' ? s.fase : s.tipo === 'esercizio' ? 'test' : null, unitaTipo: s.tipo === 'studio' ? s.unitaTipo : s.tipo === 'esercizio' ? (s.misura === 'tempo' ? 'secondi' : 'ripetizioni') : null,
     richiesto: s.tipo === 'studio' ? s.richiestoOggi : null, fatteOggi: s.tipo === 'studio' ? s.fatteOggi : null, fatte: s.tipo === 'studio' ? s.fatte : null, totali: s.tipo === 'studio' ? s.totali : null,
   }));
   return {
