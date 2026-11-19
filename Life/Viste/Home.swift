@@ -21,6 +21,74 @@ struct Home: View {
         let apre: () -> Void
     }
 
+    private func voceEvento(_ e: J, sorgenti: [Sorgente], adessoIso: String) -> VoceAgenda {
+        let l = e.own_event_id.isNull ? Lezione.di(e) : nil
+        let inizio = Tempo.oraRoma(e.start_at.str) ?? "00:00"
+        let fine = Tempo.oraRoma(e.end_at.str) ?? "00:00"
+        let orario = e.all_day.vero ? "Tutto il giorno" : "\(inizio) – \(fine)"
+        let colore = Color.life(sorgenti.first { $0.id == e.subscription_id.t }?.colore)
+        let nome = l?.titolo ?? (e.summary.t.isEmpty ? "(senza titolo)" : e.summary.t)
+        let sotto = [orario, l?.dove ?? ""].filter { !$0.isEmpty }.joined(separator: " · ")
+        let fatta = !e.all_day.vero && e.end_at.t < adessoIso
+        return VoceAgenda(id: "e:\(e.id.t)", quando: e.all_day.vero ? -1 : min(inizio), etichetta: e.all_day.vero ? "tutto" : inizio, fine: e.all_day.vero ? nil : fine, nome: nome, sotto: sotto, colore: colore, fatta: fatta) { cambiaScheda("calendario") }
+    }
+
+    /// Le prove non si fondono mai: restano da sole.
+    private func eProva(_ e: J, sorgenti: [Sorgente]) -> Bool {
+        let titolo = e.summary.t.lowercased()
+        let cal = (sorgenti.first { $0.id == e.subscription_id.t }?.nome ?? "").lowercased()
+        return titolo.contains("accertament") || titolo.contains("esame") || titolo.contains("valutazion") || cal.contains("valutazion") || cal.contains("accertament")
+    }
+
+    /// La giornata compatta (come sul PC): i periodi consecutivi dello stesso calendario, con al massimo
+    /// 15 minuti di pausa, diventano un blocco solo: «SUE · 08:20 – 18:30 · 11 periodi».
+    private func compatta(_ eventi: [J], sorgenti: [Sorgente], adessoIso: String, oraMin: Int) -> [VoceAgenda] {
+        var fuori: [VoceAgenda] = []
+        var perCal: [String: [J]] = [:]
+        var ordine: [String] = []
+        for e in eventi {
+            if e.all_day.vero || eProva(e, sorgenti: sorgenti) {
+                fuori.append(voceEvento(e, sorgenti: sorgenti, adessoIso: adessoIso))
+                continue
+            }
+            let c = e.subscription_id.t
+            if perCal[c] == nil { ordine.append(c) }
+            perCal[c, default: []].append(e)
+        }
+        for c in ordine {
+            let lista = (perCal[c] ?? []).sorted { $0.start_at.t < $1.start_at.t }
+            var catene: [[J]] = []
+            var catena: [J] = []
+            for e in lista {
+                if let ultima = catena.last {
+                    let pausa = min(Tempo.oraRoma(e.start_at.str) ?? "00:00") - min(Tempo.oraRoma(ultima.end_at.str) ?? "00:00")
+                    if pausa > 15 {
+                        catene.append(catena)
+                        catena = []
+                    }
+                }
+                catena.append(e)
+            }
+            if !catena.isEmpty { catene.append(catena) }
+            for gruppo in catene {
+                if gruppo.count == 1 {
+                    fuori.append(voceEvento(gruppo[0], sorgenti: sorgenti, adessoIso: adessoIso))
+                    continue
+                }
+                let figli = gruppo.map { voceEvento($0, sorgenti: sorgenti, adessoIso: adessoIso) }
+                let da = Tempo.oraRoma(gruppo[0].start_at.str) ?? "00:00"
+                let fineIso = gruppo.map { $0.end_at.t }.max() ?? gruppo[0].end_at.t
+                let a = Tempo.oraRoma(fineIso) ?? "00:00"
+                let nomeCal = sorgenti.first { $0.id == c }?.nome ?? "Calendario"
+                let inCorso = figli.first { !$0.fatta && $0.quando <= oraMin }
+                let coda = inCorso.map { " · ora: \($0.nome)" } ?? ""
+                let sotto = "\(da) – \(a) · \(gruppo.count) periodi" + coda
+                fuori.append(VoceAgenda(id: "b:\(c):\(gruppo[0].id.t)", quando: min(da), etichetta: da, fine: a, nome: nomeCal, sotto: sotto, colore: Color.life(sorgenti.first { $0.id == c }?.colore), fatta: fineIso < adessoIso) { cambiaScheda("calendario") })
+            }
+        }
+        return fuori
+    }
+
     private func min(_ hhmm: String) -> Int {
         let p = hhmm.split(separator: ":").map { Int($0) ?? 0 }
         return (p.first ?? 0) * 60 + (p.count > 1 ? p[1] : 0)
@@ -40,13 +108,7 @@ struct Home: View {
         let adessoIso = Tempo.iso(ora)
         let fasce: [String: (Int, String)] = ["mattina": (7, "mattina"), "pomeriggio": (13, "pom."), "preWorkout": (17, "pre"), "sera": (20, "sera"), "qualsiasi": (23, "")]
 
-        var agenda: [VoceAgenda] = eventi.map { e in
-            let l = e.own_event_id.isNull ? Lezione.di(e) : nil
-            let inizio = Tempo.oraRoma(e.start_at.str) ?? "00:00"
-            let fine = Tempo.oraRoma(e.end_at.str) ?? "00:00"
-            let orario = e.all_day.vero ? "Tutto il giorno" : "\(inizio) – \(fine)"
-            return VoceAgenda(id: "e:\(e.id.t)", quando: e.all_day.vero ? -1 : min(inizio), etichetta: e.all_day.vero ? "tutto" : inizio, fine: e.all_day.vero ? nil : fine, nome: l?.titolo ?? (e.summary.t.isEmpty ? "(senza titolo)" : e.summary.t), sotto: [orario, l?.dove ?? ""].filter { !$0.isEmpty }.joined(separator: " · "), colore: .life(sorgenti.first { $0.id == e.subscription_id.t }?.colore), fatta: !e.all_day.vero && e.end_at.t < adessoIso) { cambiaScheda("calendario") }
-        }
+        var agenda: [VoceAgenda] = compatta(eventi, sorgenti: sorgenti, adessoIso: adessoIso, oraMin: oraMin)
         agenda += tasks.filter { $0.due_has_time.vero && !$0.due_at.isNull }.map { t in
             let o = Azioni.ora(t) ?? "00:00"
             return VoceAgenda(id: "t:\(t.id.t)", quando: min(o), etichetta: o, fine: nil, nome: t.title.t.isEmpty ? "Senza titolo" : t.title.t, sotto: "Task", colore: .successoLife, fatta: false) { cambiaScheda("oggi") }
