@@ -45,6 +45,9 @@ targets:
           - UIInterfaceOrientationPortrait
         UIBackgroundModes:
           - fetch
+          - location
+        NSLocationWhenInUseUsageDescription: Per tenere Life sveglia in sottofondo e avvisarti subito quando il PC ti manda un file. La posizione non viene usata né salvata.
+        NSLocationAlwaysAndWhenInUseUsageDescription: Per avvisarti subito quando il PC ti manda un file, anche con Life chiusa. La posizione (precisione di 3 km) non viene usata né salvata.
         BGTaskSchedulerPermittedIdentifiers:
           - life.aggiornamento
         NSCameraUsageDescription: Per scattare le foto dei progressi di Mobilità.

@@ -15,6 +15,8 @@ struct LifeApp: App {
         DispatchQueue.global(qos: .userInteractive).async { _ = Archivio.s }
         Notifiche.s.avvia()
         Notifiche.s.registraAttivita()
+        // Gli avvisi dal PC (vassoio): Life resta in ascolto anche in sottofondo
+        DispatchQueue.main.async { AscoltoPC.s.avvia() }
     }
 
     var body: some Scene {

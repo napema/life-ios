@@ -5,6 +5,7 @@ struct VistaImpostazioni: View {
     @ObservedObject private var archivio = Archivio.s
     @ObservedObject private var preferenze = Preferenze.s
     @ObservedObject private var notifiche = Notifiche.s
+    @ObservedObject private var ascolto = AscoltoPC.s
     @ObservedObject private var rete = Rete.s
     @State private var password = ""
     @State private var esitoPassword: String?
@@ -35,6 +36,19 @@ struct VistaImpostazioni: View {
                 Text("Promemoria e notifiche")
             } footer: {
                 Text("I promemoria vengono programmati su questo iPhone a ogni sincronizzazione, e suonano anche ad app chiusa. Se ne crei uno dal PC, l'iPhone lo scopre quando apri Life o quando iOS le concede di aggiornarsi.")
+            }
+
+            Section {
+                Toggle("Avvisi dal PC", isOn: $ascolto.attivo)
+                if ascolto.attivo && ascolto.stato != .authorizedAlways {
+                    Button(ascolto.stato == .denied ? "Consenti la posizione nelle Impostazioni di iOS" : "Consenti «Sempre» per gli avvisi ad app chiusa") {
+                        if ascolto.stato == .notDetermined { ascolto.avvia() } else if let u = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(u) }
+                    }
+                }
+            } header: {
+                Text("Vassoio")
+            } footer: {
+                Text("Quando dal PC fai «Invia a iPhone» ti arriva subito la notifica, e toccandola si apre il vassoio. Con l'Apple ID gratuito le notifiche push non esistono: Life resta sveglia in sottofondo con la posizione a bassissima precisione (non viene usata né salvata).")
             }
 
             Section("Progetti") {
