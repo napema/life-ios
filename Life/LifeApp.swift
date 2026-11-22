@@ -50,6 +50,7 @@ struct LifeApp: App {
                 Archivio.s.segnaEventiSporchi()
                 Archivio.s.avvia()
                 Notifiche.s.aggiornaPermesso()
+                Task { await Notifiche.s.controllaVassoio() }
                 Task { await AggiornaLogica.controlla() }
                 Task { await collegaWidget() }
             case .background:
@@ -169,6 +170,8 @@ struct Radice: View {
                 instradatore.apri(url: LinkLife.task(String(apri.dropFirst(5))))
             } else if apri.hasPrefix("evento:") {
                 instradatore.apri(.calendario)
+            } else if apri.hasPrefix("modulo:"), let m = Modulo.di(String(apri.dropFirst(7))) {
+                instradatore.apri(m)
             }
         }
         .onAppear(perform: applicaDemo)

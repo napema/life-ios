@@ -54,6 +54,8 @@ final class Instradatore: ObservableObject {
             movimento = parti.first == "entrata" ? "in" : "out"
         case "modulo":
             if let id = parti.first, let m = Modulo.di(id) { apri(m) }
+        // la notifica «Il PC ti ha mandato un file»
+        case "vassoio": apri(.vassoio)
         default: break
         }
     }

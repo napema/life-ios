@@ -135,31 +135,43 @@ struct Home: View {
         let fatteAbi = gettoni.filter { $0.fatta.vero || $0.saltata.vero }.count
 
         return ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                adesso(q, prossima, oraMin)
+            VStack(alignment: .leading, spacing: 26) {
+                eroe(q, prossima, oraMin, restano: restano.count)
 
-                widgetAgenda(restano, passate: passate, totale: agenda.count)
-
-                if !fin.isNull { widgetFinanze(fin, allarme: q.allarme.str) }
-
-                LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
-                    if !abi.isNull { widgetAbitudini(gettoni, fatte: fatteAbi) }
-                    widgetPasti(oggi, oraMin)
-                    if !tra.isNull { widgetSemplice("allenamenti", valore: tra.valore.t, sotto: tra.dettaglio.t) }
-                    if !mob.isNull { widgetSemplice("mobilita", valore: mob.valore.t, sotto: mob.dettaglio.t, colore: mob.fatto.vero ? .successoLife : nil) }
-                    if let r = rnk.ontrack.list.first {
-                        // On track: la prova in preparazione più importante, col suo stato
-                        widgetSemplice("rank", valore: r.titolo.t, sotto: [r.quando.t, r.riga.t].filter { !$0.isEmpty }.joined(separator: " · "), colore: Color(hex: r.colore.t))
-                    } else if !rnk.isNull {
-                        widgetSemplice("rank", valore: rnk.valore.t, sotto: [rnk.prova.t, rnk.dettaglio.t].filter { !$0.isEmpty }.joined(separator: " · "), colore: rnk.urgente.vero ? .pericoloLife : nil)
-                    }
+                // Il colpo d'occhio: tre tessere uguali, sempre sulla stessa riga
+                HStack(alignment: .top, spacing: 12) {
+                    tesseraFinanze(fin)
+                    tesseraAbitudini(gettoni, fatte: fatteAbi)
+                    tesseraPasti(oggi, oraMin)
                 }
 
-                widgetTodo(tasks)
+                if gettoni.contains(where: { !$0.fatta.vero && !$0.saltata.vero }) {
+                    blocco("Abitudini di oggi", coda: "\(fatteAbi)/\(gettoni.count)") { fileAbitudini(gettoni) }
+                }
+
+                blocco("La giornata", coda: passate > 0 ? "\(passate) passate" : "", apri: { cambiaScheda("calendario") }) {
+                    elencoAgenda(restano, totale: agenda.count)
+                }
+
+                blocco("To do", coda: tasks.isEmpty ? "" : "\(tasks.count)", apri: { cambiaScheda("oggi") }) {
+                    elencoTodo(tasks)
+                }
+
+                let righe = righeModuli(tra: tra, mob: mob, rnk: rnk)
+                if !righe.isEmpty {
+                    blocco("Le tue app") {
+                        Elenco {
+                            ForEach(Array(righe.enumerated()), id: \.offset) { i, r in
+                                if i > 0 { Divider().padding(.leading, 58) }
+                                rigaModulo(r)
+                            }
+                        }
+                    }
+                }
             }
             .padding(.horizontal, 16)
-            .padding(.top, 8)
-            .padding(.bottom, 30)
+            .padding(.top, 6)
+            .padding(.bottom, 36)
         }
         .background(Color.sfondoLife)
         .navigationTitle(logica.chiama("home.saluto", .n(Calendar.current.component(.hour, from: ora))).t)
@@ -175,217 +187,299 @@ struct Home: View {
         return "\(Tempo.settimanaLunga[Tempo.giornoSettimana(g)].maiuscola) \(d) \(Tempo.mesiLunghi[m - 1].lowercased())"
     }
 
+    // MARK: I mattoni (tutti con le stesse misure: 16 di margine, angoli da 22)
+
+    /// Un blocco con il titolo a sinistra e, a destra, il conteggio (toccando il titolo si apre l'app).
+    private func blocco<C: View>(_ titolo: String, coda: String = "", apri: (() -> Void)? = nil, @ViewBuilder contenuto: () -> C) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Button { apri?() } label: {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text(titolo).font(.title3.weight(.bold)).foregroundStyle(Color.primary)
+                    if apri != nil { Image(systemName: "chevron.right").font(.footnote.weight(.bold)).foregroundStyle(Color.terziarioLife) }
+                    Spacer()
+                    Text(coda).font(.subheadline).monospacedDigit().foregroundStyle(Color.secondarioLife)
+                }
+                .padding(.horizontal, 4)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(apri == nil)
+            contenuto()
+        }
+    }
+
+    private struct Elenco<C: View>: View {
+        @ViewBuilder var contenuto: () -> C
+        var body: some View {
+            VStack(spacing: 0) { contenuto() }
+                .frame(maxWidth: .infinity)
+                .background(Color.cartaLife, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        }
+    }
+
+    /// Il quadratino colorato con il simbolo, come nelle Impostazioni di iOS.
+    private func simbolo(_ icona: String, _ colore: Color, lato: CGFloat = 30) -> some View {
+        Image(systemName: icona)
+            .font(.system(size: lato * 0.5, weight: .semibold))
+            .foregroundStyle(.white)
+            .frame(width: lato, height: lato)
+            .background(colore.gradient, in: RoundedRectangle(cornerRadius: lato * 0.28, style: .continuous))
+    }
+
     // MARK: Adesso
 
     @ViewBuilder
-    private func adesso(_ q: J, _ prossima: VoceAgenda?, _ oraMin: Int) -> some View {
+    private func eroe(_ q: J, _ prossima: VoceAgenda?, _ oraMin: Int, restano: Int) -> some View {
         if let v = q.prio.list.first {
             let tardi = v.quando.str == "tardi"
             let m = Modulo.di(v.modulo.t)
-            HStack(spacing: 12) {
-                Capsule().fill(Color(hex: m?.colore ?? "#0A84FF")).frame(width: 3)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(tardi ? "IN RITARDO" : "ADESSO").font(.caption2.weight(.semibold)).foregroundStyle(tardi ? Color.pericoloLife : Color.secondarioLife)
-                    Text(v.nome.t).font(.title3.weight(.semibold))
-                    let s = [v.dentro.str, v.nomeFascia.str].compactMap { $0 }.joined(separator: " · ")
-                    if !s.isEmpty { Text(s).font(.footnote).foregroundStyle(Color.secondarioLife) }
-                }
-                Spacer()
+            let s = [v.dentro.str, v.nomeFascia.str].compactMap { $0 }.joined(separator: " · ")
+            schedaEroe(etichetta: tardi ? "In ritardo" : "Adesso", colore: tardi ? .pericoloLife : Color(hex: m?.colore ?? "#0A84FF"), icona: m?.icona ?? "bolt.fill", titolo: v.nome.t, sotto: s) {
                 if v.habitId.vero {
-                    Button("Fatto") {
+                    pulsanteEroe("Fatto", colore: Color(hex: m?.colore ?? "#0A84FF")) {
                         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
                         logica.chiama("home.fai", v)
                     }
-                    .buttonStyle(.bordered)
-                    .buttonBorderShape(.capsule)
                 } else if v.apre.vero, let m {
-                    Button(v.apre.t.contains("/inizia") ? "Avvia" : "Apri") { apriModulo(m) }
-                        .buttonStyle(.bordered)
-                        .buttonBorderShape(.capsule)
+                    pulsanteEroe(v.apre.t.contains("/inizia") ? "Avvia" : "Apri", colore: Color(hex: m.colore)) { apriModulo(m) }
                 }
             }
-            .padding(14)
-            .background(Color.cartaLife, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-        } else if let p = prossima, !p.etichetta.isEmpty, p.etichetta.contains(":") {
+        } else if let p = prossima, p.etichetta.contains(":"), p.quando - oraMin > -60, p.quando - oraMin < 240 {
             let fra = p.quando - oraMin
-            if fra > -60, fra < 180 {
-                HStack(spacing: 12) {
-                    Capsule().fill(p.colore).frame(width: 3)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text((fra <= 0 ? "Adesso" : fra < 60 ? "Tra \(fra) min" : "Alle \(p.etichetta)").uppercased()).font(.caption2.weight(.semibold)).foregroundStyle(Color.secondarioLife)
-                        Text(p.nome).font(.title3.weight(.semibold))
-                        if let s = p.sotto { Text(s).font(.footnote).foregroundStyle(Color.secondarioLife) }
-                    }
-                    Spacer()
-                    Button("Apri", action: p.apre).buttonStyle(.bordered).buttonBorderShape(.capsule)
-                }
-                .padding(14)
-                .background(Color.cartaLife, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            schedaEroe(etichetta: fra <= 0 ? "Adesso" : fra < 60 ? "Tra \(fra) min" : "Alle \(p.etichetta)", colore: p.colore, icona: "calendar", titolo: p.nome, sotto: p.sotto ?? "") {
+                pulsanteEroe("Apri", colore: p.colore, azione: p.apre)
+            }
+        } else {
+            schedaEroe(etichetta: "Oggi", colore: .accentoLife, icona: "sun.max.fill", titolo: restano == 0 ? "Niente in programma" : "\(restano) \(restano == 1 ? "cosa" : "cose") da fare", sotto: restano == 0 ? "Giornata libera: goditela." : "La prossima è più avanti.") {
+                EmptyView()
             }
         }
     }
 
-    // MARK: I widget
-
-    private func testata(_ nome: String, _ icona: String, _ colore: String, destra: String = "") -> some View {
-        HStack(spacing: 5) {
-            Image(systemName: icona).font(.caption).foregroundStyle(Color(hex: colore))
-            Text(nome.uppercased()).font(.caption2.weight(.semibold)).foregroundStyle(Color.secondarioLife)
-            Spacer()
-            Text(destra).font(.caption).monospacedDigit().foregroundStyle(Color.secondarioLife)
+    private func schedaEroe<A: View>(etichetta: String, colore: Color, icona: String, titolo: String, sotto: String, @ViewBuilder azione: () -> A) -> some View {
+        HStack(alignment: .center, spacing: 14) {
+            simbolo(icona, colore, lato: 44)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(etichetta.uppercased()).font(.caption.weight(.bold)).foregroundStyle(colore)
+                Text(titolo).font(.title3.weight(.semibold)).lineLimit(2)
+                if !sotto.isEmpty { Text(sotto).font(.subheadline).foregroundStyle(Color.secondarioLife).lineLimit(2) }
+            }
+            Spacer(minLength: 8)
+            azione()
         }
+        .padding(16)
+        .frame(maxWidth: .infinity, minHeight: 92, alignment: .leading)
+        .background(
+            LinearGradient(colors: [colore.opacity(0.22), Color.cartaLife], startPoint: .topLeading, endPoint: .bottomTrailing),
+            in: RoundedRectangle(cornerRadius: 22, style: .continuous)
+        )
+        .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).strokeBorder(colore.opacity(0.25), lineWidth: 1))
     }
 
-    private func widgetAgenda(_ restano: [VoceAgenda], passate: Int, totale: Int) -> some View {
-        Carta {
-            Button { cambiaScheda("calendario") } label: {
-                testata("Calendario", "calendar", "#FF453A", destra: passate > 0 ? "\(passate) già passate" : "")
-            }
-            .buttonStyle(.plain)
-            Text(restano.isEmpty ? "Oggi" : "\(restano.count) \(restano.count == 1 ? "cosa" : "cose") oggi").font(.title3.weight(.semibold))
-            if restano.isEmpty {
-                Text(totale > 0 ? "Per oggi è tutto." : "Giornata libera.").font(.subheadline).foregroundStyle(Color.secondarioLife)
-            }
-            ForEach(Array(restano.prefix(8).enumerated()), id: \.element.id) { i, v in
-                Button(action: v.apre) {
-                    HStack(spacing: 10) {
-                        Capsule().fill(v.colore).frame(width: 3, height: 30)
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text(v.nome).font(.subheadline.weight(i == 0 ? .semibold : .regular)).lineLimit(1)
-                            if let s = v.sotto, !s.isEmpty { Text(s).font(.caption).foregroundStyle(Color.secondarioLife).lineLimit(1) }
-                        }
-                        Spacer()
-                        Text(v.etichetta).font(.caption).monospacedDigit().foregroundStyle(Color.secondarioLife)
-                    }
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-            }
-            if restano.count > 8 { Text("e altre \(restano.count - 8)").font(.caption).foregroundStyle(Color.secondarioLife) }
-        }
-    }
-
-    private func widgetFinanze(_ fin: J, allarme: String?) -> some View {
-        Button { Modulo.di("finanze").map(apriModulo) } label: {
-            Carta {
-                testata("Finanze", "eurosign.circle.fill", "#FF9500", destra: fin.oggiFino.t)
-                HStack(alignment: .bottom) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(fin.oggiEti.str ?? "Puoi spendere oggi").font(.footnote).foregroundStyle(fin.oggiMale.vero ? Color.pericoloLife : Color.secondarioLife)
-                        Text(fin.oggiPuoi.str ?? fin.valore.str ?? "—")
-                            .font(.system(size: 34, weight: .semibold))
-                            .monospacedDigit()
-                            .foregroundStyle(fin.oggiMale.vero ? Color.pericoloLife : Color.primary)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.6)
-                    }
-                    Spacer()
-                    let u = fin.urgenti[0]
-                    if !u.isNull {
-                        VStack(alignment: .trailing, spacing: 1) {
-                            Text("\(u.giornoNome.t) \(u.giornoData.t)").font(.caption2).foregroundStyle(Color.secondarioLife)
-                            Text(u.nome.t).font(.footnote).lineLimit(1)
-                            Text(u.valore.t).font(.footnote.weight(.semibold)).monospacedDigit()
-                        }
-                    }
-                }
-                if let allarme { Text(allarme).font(.footnote).foregroundStyle(Color.secondarioLife).lineLimit(2) }
-            }
+    private func pulsanteEroe(_ testo: String, colore: Color, azione: @escaping () -> Void) -> some View {
+        Button(action: azione) {
+            Text(testo).font(.subheadline.weight(.semibold)).foregroundStyle(.white).padding(.horizontal, 16).frame(height: 34).background(colore, in: Capsule())
         }
         .buttonStyle(.plain)
     }
 
-    private func widgetAbitudini(_ gettoni: [J], fatte: Int) -> some View {
-        Carta(padding: 14) {
-            Button { Modulo.di("abitudini").map(apriModulo) } label: {
-                VStack(alignment: .leading, spacing: 8) {
-                    testata("Abitudini", "checkmark.seal.fill", "#5E5CE6", destra: gettoni.isEmpty ? "" : "\(fatte)/\(gettoni.count)")
-                    HStack(spacing: 10) {
-                        Anello(valore: gettoni.isEmpty ? 0 : Double(fatte) / Double(gettoni.count), misura: 42, spessore: 6, colore: Color(hex: "#5E5CE6"))
-                        Text("\(fatte)").font(.title.weight(.semibold)).monospacedDigit()
-                            + Text(" di \(gettoni.count)").font(.footnote).foregroundColor(Color.secondarioLife)
-                    }
+    // MARK: Le tessere
+
+    private func tessera<C: View>(_ titolo: String, icona: String, colore: Color, apri: @escaping () -> Void, @ViewBuilder contenuto: () -> C) -> some View {
+        Button(action: apri) {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 6) {
+                    Image(systemName: icona).font(.caption.weight(.semibold)).foregroundStyle(colore)
+                    Text(titolo).font(.caption.weight(.semibold)).foregroundStyle(Color.secondarioLife).lineLimit(1)
                 }
+                contenuto()
+                Spacer(minLength: 0)
             }
-            .buttonStyle(.plain)
-            LazyVGrid(columns: Array(repeating: GridItem(.fixed(32), spacing: 4), count: 4), alignment: .leading, spacing: 4) {
-                ForEach(gettoni.prefix(8), id: \.self) { r in
+            .padding(14)
+            .frame(maxWidth: .infinity, minHeight: 118, maxHeight: 118, alignment: .topLeading)
+            .background(Color.cartaLife, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func tesseraFinanze(_ fin: J) -> some View {
+        tessera("Oggi", icona: "eurosign.circle.fill", colore: Color(hex: "#FF9500"), apri: { Modulo.di("finanze").map(apriModulo) }) {
+            Text(fin.isNull ? "—" : (fin.oggiPuoi.str ?? fin.valore.str ?? "—"))
+                .font(.title2.weight(.semibold)).monospacedDigit()
+                .foregroundStyle(fin.oggiMale.vero ? Color.pericoloLife : Color.primary)
+                .lineLimit(1).minimumScaleFactor(0.5)
+            Text(fin.oggiMale.vero ? "oltre il budget" : "da spendere").font(.caption).foregroundStyle(Color.secondarioLife).lineLimit(1)
+        }
+    }
+
+    private func tesseraAbitudini(_ gettoni: [J], fatte: Int) -> some View {
+        tessera("Abitudini", icona: "checkmark.seal.fill", colore: Color(hex: "#5E5CE6"), apri: { Modulo.di("abitudini").map(apriModulo) }) {
+            HStack(spacing: 8) {
+                Anello(valore: gettoni.isEmpty ? 0 : Double(fatte) / Double(gettoni.count), misura: 34, spessore: 5, colore: Color(hex: "#5E5CE6"))
+                Text("\(fatte)").font(.title2.weight(.semibold)).monospacedDigit()
+                    + Text("/\(gettoni.count)").font(.subheadline).foregroundColor(Color.secondarioLife)
+            }
+            Text(gettoni.isEmpty ? "niente oggi" : fatte == gettoni.count ? "tutte fatte" : "da fare \(gettoni.count - fatte)").font(.caption).foregroundStyle(Color.secondarioLife).lineLimit(1)
+        }
+    }
+
+    private func tesseraPasti(_ oggi: String, _ oraMin: Int) -> some View {
+        let b = logica.chiama("pasti.calcolo.bersagli")
+        let g = logica.chiama("pasti.calcolo.giornata", .str(oggi))
+        let kcal = Int(g.totale.kcal.d)
+        let obiettivo = b.kcal.int ?? 0
+        return tessera("Pasti", icona: "fork.knife", colore: Color(hex: "#FF2D55"), apri: { Modulo.di("pasti").map(apriModulo) }) {
+            HStack(spacing: 8) {
+                Anello(valore: obiettivo > 0 ? Double(kcal) / Double(obiettivo) : 0, misura: 34, spessore: 5, colore: Color(hex: "#FF2D55"))
+                Text("\(kcal)").font(.title2.weight(.semibold)).monospacedDigit().lineLimit(1).minimumScaleFactor(0.6)
+            }
+            Text(obiettivo > 0 ? "di \(obiettivo) kcal" : "kcal oggi").font(.caption).foregroundStyle(Color.secondarioLife).lineLimit(1)
+        }
+    }
+
+    // MARK: Abitudini di oggi (si segnano da qui)
+
+    private func fileAbitudini(_ gettoni: [J]) -> some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 10) {
+                ForEach(gettoni, id: \.self) { r in
+                    let fatta = r.fatta.vero || r.saltata.vero
                     Button {
                         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
                         var v = r
                         v["modulo"] = "abitudini"
                         logica.chiama("home.fai", v)
                     } label: {
-                        Text(r.emoji.str ?? "⭐️")
-                            .font(.system(size: 16))
-                            .frame(width: 32, height: 32)
-                            .background(r.fatta.vero ? Color(hex: "#5E5CE6").opacity(0.22) : Color(uiColor: .tertiarySystemFill), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
-                            .opacity(r.fatta.vero || r.saltata.vero ? 0.5 : 1)
+                        VStack(spacing: 6) {
+                            Text(r.emoji.str ?? "⭐️").font(.system(size: 24))
+                                .frame(width: 54, height: 54)
+                                .background(fatta ? Color(hex: "#5E5CE6").opacity(0.25) : Color.cartaLife, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                                .overlay(alignment: .bottomTrailing) {
+                                    if fatta {
+                                        Image(systemName: "checkmark.circle.fill").font(.system(size: 16)).foregroundStyle(.white, Color(hex: "#5E5CE6")).offset(x: 4, y: 4)
+                                    }
+                                }
+                            Text(r.ora.str ?? r.nome.t).font(.caption2).foregroundStyle(Color.secondarioLife).lineLimit(1).frame(width: 60)
+                        }
+                        .opacity(fatta ? 0.6 : 1)
                     }
                     .buttonStyle(.plain)
                 }
             }
+            .padding(.horizontal, 2)
         }
     }
+
+    // MARK: La giornata
 
     @ViewBuilder
-    private func widgetPasti(_ oggi: String, _ oraMin: Int) -> some View {
-        let b = logica.chiama("pasti.calcolo.bersagli")
-        if b.kcal.vero {
-            let g = logica.chiama("pasti.calcolo.giornata", .str(oggi))
-            let fasce = logica.chiama("pasti.dati.FASCE").list
-            let conPasto = fasce.map { f -> (J, J) in (f, g.fasce.list.first { $0.fascia == f.id } ?? .null) }
-            let prossimo = conPasto.first { $0.1.nome.vero && min($0.0.ora.t) >= oraMin - 60 } ?? conPasto.first { $0.1.nome.vero }
-            Button { Modulo.di("pasti").map(apriModulo) } label: {
-                Carta(padding: 14) {
-                    testata("Pasti", "fork.knife", "#FF2D55", destra: "\(Int(g.totale.kcal.d)) / \(b.kcal.int ?? 0)")
-                    HStack(spacing: 10) {
-                        Anello(valore: g.totale.kcal.d / max(1, b.kcal.d), misura: 42, spessore: 6, colore: Color(hex: "#FF2D55"))
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text(prossimo.map { "\($0.0.nome.t) · \($0.0.ora.t)" } ?? "Oggi").font(.caption2).foregroundStyle(Color.secondarioLife)
-                            Text(prossimo?.1.nome.t ?? "Da decidere").font(.subheadline.weight(.semibold)).lineLimit(2)
+    private func elencoAgenda(_ restano: [VoceAgenda], totale: Int) -> some View {
+        Elenco {
+            if restano.isEmpty {
+                Text(totale > 0 ? "Per oggi è tutto." : "Giornata libera.").font(.subheadline).foregroundStyle(Color.secondarioLife).frame(maxWidth: .infinity, alignment: .leading).padding(16)
+            }
+            ForEach(Array(restano.prefix(8).enumerated()), id: \.element.id) { i, v in
+                if i > 0 { Divider().padding(.leading, 76) }
+                Button(action: v.apre) {
+                    HStack(spacing: 12) {
+                        VStack(alignment: .trailing, spacing: 1) {
+                            Text(v.etichetta == "tutto" ? "tutto" : v.etichetta).font(.subheadline.weight(.semibold)).monospacedDigit()
+                            if let f = v.fine { Text(f).font(.caption).monospacedDigit().foregroundStyle(Color.secondarioLife) }
                         }
+                        .frame(width: 46, alignment: .trailing)
+                        Capsule().fill(v.colore).frame(width: 4, height: 34)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(v.nome).font(.body.weight(i == 0 ? .semibold : .regular)).lineLimit(1)
+                            if let s = v.sotto, !s.isEmpty { Text(s).font(.caption).foregroundStyle(Color.secondarioLife).lineLimit(1) }
+                        }
+                        Spacer(minLength: 0)
                     }
-                    Text("\(max(0, Int(b["p"].d - g.totale["p"].d))) g di proteine da prendere").font(.caption).foregroundStyle(Color.secondarioLife)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .contentShape(Rectangle())
                 }
+                .buttonStyle(.plain)
             }
-            .buttonStyle(.plain)
+            if restano.count > 8 {
+                Divider().padding(.leading, 76)
+                Button { cambiaScheda("calendario") } label: {
+                    Text("Altre \(restano.count - 8)").font(.subheadline.weight(.medium)).foregroundStyle(Color.accentoLife).frame(maxWidth: .infinity, alignment: .leading).padding(.leading, 76).padding(.vertical, 12)
+                }
+                .buttonStyle(.plain)
+            }
         }
     }
 
-    private func widgetSemplice(_ id: String, valore: String, sotto: String, colore: Color? = nil) -> some View {
-        let m = Modulo.di(id)
-        return Button { m.map(apriModulo) } label: {
-            Carta(padding: 14) {
-                testata(m?.nome ?? "", m?.icona ?? "circle", m?.colore ?? "#8E8E93")
-                Text(valore.isEmpty ? "—" : valore).font(.title2.weight(.semibold)).monospacedDigit().foregroundStyle(colore ?? Color.primary).lineLimit(1).minimumScaleFactor(0.6)
-                Text(sotto).font(.footnote).foregroundStyle(Color.secondarioLife).lineLimit(2)
-            }
-        }
-        .buttonStyle(.plain)
-    }
+    // MARK: To do
 
-    private func widgetTodo(_ tasks: [J]) -> some View {
+    private func elencoTodo(_ tasks: [J]) -> some View {
         let ordinati = tasks.sorted(by: Azioni.ordina)
-        return Carta {
-            Button { cambiaScheda("oggi") } label: {
-                testata("To do", "checkmark.square.fill", "#34C759", destra: tasks.isEmpty ? "" : "\(tasks.count)")
-            }
-            .buttonStyle(.plain)
+        return Elenco {
             if tasks.isEmpty {
-                Text("Tutto fatto.").font(.subheadline).foregroundStyle(Color.secondarioLife)
+                Text("Tutto fatto.").font(.subheadline).foregroundStyle(Color.secondarioLife).frame(maxWidth: .infinity, alignment: .leading).padding(16)
             }
-            ForEach(ordinati.prefix(5), id: \.id) { t in
-                HStack(spacing: 6) {
-                    Casella(task: t, lato: 19)
-                    Text(t.title.t.isEmpty ? "Senza titolo" : t.title.t).font(.subheadline).lineLimit(1)
-                    Spacer()
-                    if let o = Azioni.ora(t) { Text(o).font(.caption).monospacedDigit().foregroundStyle(Color.secondarioLife) }
+            ForEach(Array(ordinati.prefix(6).enumerated()), id: \.element.id) { i, t in
+                if i > 0 { Divider().padding(.leading, 48) }
+                HStack(spacing: 12) {
+                    Casella(task: t, lato: 22)
+                    Text(t.title.t.isEmpty ? "Senza titolo" : t.title.t).font(.body).lineLimit(1)
+                    Spacer(minLength: 0)
+                    if let o = Azioni.ora(t) { Text(o).font(.subheadline).monospacedDigit().foregroundStyle(Color.secondarioLife) }
                 }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 11)
                 .contentShape(Rectangle())
                 .onTapGesture { taskAperto = TaskAperto(task: t) }
             }
-            if tasks.count > 5 { Text("+\(tasks.count - 5) altri").font(.caption).foregroundStyle(Color.secondarioLife) }
+            if tasks.count > 6 {
+                Divider().padding(.leading, 48)
+                Button { cambiaScheda("oggi") } label: {
+                    Text("Altri \(tasks.count - 6)").font(.subheadline.weight(.medium)).foregroundStyle(Color.accentoLife).frame(maxWidth: .infinity, alignment: .leading).padding(.leading, 48).padding(.vertical, 12)
+                }
+                .buttonStyle(.plain)
+            }
         }
+    }
+
+    // MARK: Le altre app
+
+    private struct RigaModulo {
+        let modulo: Modulo
+        let valore: String
+        let sotto: String
+        let colore: Color?
+    }
+
+    private func righeModuli(tra: J, mob: J, rnk: J) -> [RigaModulo] {
+        var r: [RigaModulo] = []
+        if !tra.isNull, let m = Modulo.di("allenamenti") { r.append(RigaModulo(modulo: m, valore: tra.valore.t, sotto: tra.dettaglio.t, colore: nil)) }
+        if !mob.isNull, let m = Modulo.di("mobilita") { r.append(RigaModulo(modulo: m, valore: mob.valore.t, sotto: mob.dettaglio.t, colore: mob.fatto.vero ? .successoLife : nil)) }
+        if let m = Modulo.di("rank") {
+            if let o = rnk.ontrack.list.first {
+                r.append(RigaModulo(modulo: m, valore: o.titolo.t, sotto: [o.quando.t, o.riga.t].filter { !$0.isEmpty }.joined(separator: " · "), colore: Color(hex: o.colore.t)))
+            } else if !rnk.isNull {
+                r.append(RigaModulo(modulo: m, valore: rnk.valore.t, sotto: [rnk.prova.t, rnk.dettaglio.t].filter { !$0.isEmpty }.joined(separator: " · "), colore: rnk.urgente.vero ? .pericoloLife : nil))
+            }
+        }
+        return r
+    }
+
+    private func rigaModulo(_ r: RigaModulo) -> some View {
+        Button { apriModulo(r.modulo) } label: {
+            HStack(spacing: 14) {
+                simbolo(r.modulo.icona, Color(hex: r.modulo.colore))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(r.modulo.nome).font(.body)
+                    if !r.sotto.isEmpty { Text(r.sotto).font(.caption).foregroundStyle(Color.secondarioLife).lineLimit(1) }
+                }
+                Spacer(minLength: 8)
+                Text(r.valore.isEmpty ? "—" : r.valore).font(.subheadline.weight(.semibold)).monospacedDigit().foregroundStyle(r.colore ?? Color.secondarioLife).lineLimit(1)
+                Image(systemName: "chevron.right").font(.footnote.weight(.semibold)).foregroundStyle(Color.terziarioLife)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 11)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 }

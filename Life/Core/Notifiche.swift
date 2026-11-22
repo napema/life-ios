@@ -92,6 +92,32 @@ final class Notifiche: NSObject, ObservableObject, UNUserNotificationCenterDeleg
         await MainActor.run { self.daAprire = apri }
     }
 
+    // MARK: Il vassoio: «Il PC ti ha mandato un file»
+
+    private static let chiaveVassoio = "vassoio.avvisati"
+
+    /// I file arrivati dal PC che non hai ancora visto: una notifica (toccandola si apre il vassoio).
+    /// Gira in sottofondo (quando iOS lo concede) e ogni volta che Life torna in primo piano.
+    func controllaVassoio() async {
+        guard Rete.s.connesso, let righe = try? await Rete.s.righe("vassoio", "select=id,nome&da=eq.pc&ritirato_iphone=eq.false&order=creato.desc", da: 0, a: 19) else { return }
+        let visti = Set(UserDefaults.standard.stringArray(forKey: Self.chiaveVassoio) ?? [])
+        let nuovi = righe.filter { !visti.contains($0.id.t) }
+        guard let primo = nuovi.first else { return }
+        segnaVassoioVisto(nuovi.map { $0.id.t })
+        let c = UNMutableNotificationContent()
+        c.title = "Il PC ti ha mandato \(nuovi.count == 1 ? "un file" : "\(nuovi.count) file")"
+        c.body = nuovi.count == 1 ? "\(primo.nome.t) · tocca per aprire il vassoio" : nuovi.prefix(3).map { $0.nome.t }.joined(separator: ", ")
+        c.sound = .default
+        c.userInfo = ["apri": "modulo:vassoio"]
+        try? await UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: "vassoio:\(primo.id.t)", content: c, trigger: nil))
+    }
+
+    func segnaVassoioVisto(_ id: [String]) {
+        var visti = UserDefaults.standard.stringArray(forKey: Self.chiaveVassoio) ?? []
+        for i in id where !visti.contains(i) { visti.append(i) }
+        UserDefaults.standard.set(Array(visti.suffix(300)), forKey: Self.chiaveVassoio)
+    }
+
     // MARK: Aggiornamento in background
 
     func registraAttivita() {
@@ -101,6 +127,7 @@ final class Notifiche: NSObject, ObservableObject, UNUserNotificationCenterDeleg
             let lavoro = Task { @MainActor in
                 await Archivio.s.sincronizza()
                 Archivio.s.salvaOra()
+                await self.controllaVassoio()
                 a.setTaskCompleted(success: true)
             }
             a.expirationHandler = { lavoro.cancel() }

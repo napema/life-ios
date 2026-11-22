@@ -1,4 +1,5 @@
 import PhotosUI
+import QuickLook
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -16,6 +17,9 @@ struct VistaVassoio: View {
     @State private var foto: [PhotosPickerItem] = []
     @State private var scegliFile = false
     @State private var scaricati: [String: URL] = [:]
+    /// Il file aperto in anteprima (Quick Look: testo, PDF, Word, Excel, immagini, video…)
+    @State private var anteprima: URL?
+    @State private var aprendo: String?
 
     var body: some View {
         Pagina {
@@ -52,7 +56,7 @@ struct VistaVassoio: View {
             Sezione("Dal PC") {
                 Carta(padding: 6) {
                     if dalPc.isEmpty {
-                        Text(carico ? "Niente per ora. Dal notch: clic destro su un file → Invia a iPhone." : "Carico…")
+                        Text(carico ? "Niente per ora. Sul PC: clic destro su un file → Invia a iPhone." : "Carico…")
                             .font(.footnote).foregroundStyle(Color.secondarioLife).padding(10)
                     }
                     ForEach(dalPc, id: \.id) { r in rigaPc(r) }
@@ -77,8 +81,10 @@ struct VistaVassoio: View {
             Text("I file restano 3 giorni, poi si cancellano da soli. Massimo 50 MB a file.").font(.caption).foregroundStyle(Color.secondarioLife).padding(.horizontal, 4)
         }
         .navigationTitle("Vassoio")
+        .quickLookPreview($anteprima)
         .refreshable { await carica() }
         .task { await carica() }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in Task { await carica() } }
         .onChange(of: foto) { _, nuove in
             guard !nuove.isEmpty else { return }
             Task { await inviaFoto(nuove) }
@@ -88,21 +94,92 @@ struct VistaVassoio: View {
         }
     }
 
+    /// Un file arrivato dal PC: tocca per vederlo subito (si scarica nella cache dell'app, non nei
+    /// tuoi File); «Salva» lo condivide o lo mette in File.
     private func rigaPc(_ r: J) -> some View {
-        HStack(spacing: 10) {
-            Image(systemName: "desktopcomputer").foregroundStyle(bluVassoio).frame(width: 28)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(r.nome.t).font(.subheadline).lineLimit(1)
-                Text(peso(r.byte.d)).font(.caption).foregroundStyle(Color.secondarioLife)
+        let (icona, colore) = tipo(r.nome.t)
+        return HStack(spacing: 12) {
+            Image(systemName: icona)
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: 40, height: 40)
+                .background(colore.gradient, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(r.nome.t).font(.body).lineLimit(1)
+                Text([peso(r.byte.d), quando(r.creato.str)].filter { !$0.isEmpty }.joined(separator: " · ")).font(.caption).foregroundStyle(Color.secondarioLife)
             }
-            Spacer()
-            if let url = scaricati[r.id.t] {
-                ShareLink(item: url) { Image(systemName: "square.and.arrow.up") }
+            Spacer(minLength: 8)
+            if aprendo == r.id.t {
+                ProgressView()
+            } else if let url = scaricati[r.id.t] ?? inCache(r) {
+                ShareLink(item: url) {
+                    Image(systemName: "square.and.arrow.down").font(.body.weight(.semibold)).foregroundStyle(bluVassoio).frame(width: 36, height: 36)
+                }
+                .simultaneousGesture(TapGesture().onEnded { segnaRitirato(r) })
             } else {
-                Button("Scarica") { Task { await scarica(r) } }.font(.subheadline.weight(.semibold)).foregroundStyle(bluVassoio)
+                Image(systemName: "eye").font(.body.weight(.semibold)).foregroundStyle(bluVassoio).frame(width: 36, height: 36)
             }
         }
-        .padding(.horizontal, 10).padding(.vertical, 8)
+        .padding(.horizontal, 12).padding(.vertical, 9)
+        .contentShape(Rectangle())
+        .onTapGesture { Task { await apri(r) } }
+    }
+
+    private func tipo(_ nome: String) -> (String, Color) {
+        switch (nome as NSString).pathExtension.lowercased() {
+        case "pdf": return ("doc.richtext.fill", Color(hex: "#FF453A"))
+        case "doc", "docx", "rtf", "pages": return ("doc.text.fill", Color(hex: "#0A84FF"))
+        case "xls", "xlsx", "csv", "numbers": return ("tablecells.fill", Color(hex: "#30D158"))
+        case "ppt", "pptx", "key": return ("rectangle.on.rectangle.angled.fill", Color(hex: "#FF9F0A"))
+        case "txt", "md", "json", "log", "rs", "ts", "tsx", "js", "swift", "py": return ("text.alignleft", Color(hex: "#8E8E93"))
+        case "png", "jpg", "jpeg", "heic", "gif", "webp": return ("photo.fill", Color(hex: "#BF5AF2"))
+        case "mp4", "mov", "mkv", "avi": return ("play.rectangle.fill", Color(hex: "#FF375F"))
+        case "mp3", "wav", "m4a", "flac": return ("music.note", Color(hex: "#FF2D55"))
+        case "zip", "rar", "7z": return ("archivebox.fill", Color(hex: "#AC8E68"))
+        default: return ("doc.fill", Color(hex: "#64D2FF"))
+        }
+    }
+
+    private func quando(_ iso: String?) -> String {
+        guard let iso, let d = ISO8601DateFormatter.conFrazioni.date(from: iso) ?? ISO8601DateFormatter().date(from: iso) else { return "" }
+        let f = RelativeDateTimeFormatter()
+        f.locale = Locale(identifier: "it_IT")
+        f.unitsStyle = .short
+        return f.localizedString(for: d, relativeTo: Date())
+    }
+
+    /// La cartella dei file già visti (nella cache: iOS la svuota da solo se serve spazio).
+    private func cartella(_ r: J) -> URL {
+        FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0].appendingPathComponent("vassoio/\(r.id.t)", isDirectory: true)
+    }
+
+    private func inCache(_ r: J) -> URL? {
+        let u = cartella(r).appendingPathComponent(r.nome.t)
+        return FileManager.default.fileExists(atPath: u.path) ? u : nil
+    }
+
+    private func apri(_ r: J) async {
+        if let u = scaricati[r.id.t] ?? inCache(r) {
+            anteprima = u
+            return
+        }
+        aprendo = r.id.t
+        defer { aprendo = nil }
+        do {
+            let (dati, _) = try await Rete.s.chiedi("\(base)/storage/v1/object/vassoio/\(percorsoUrl(r.percorso.t))", metodo: "GET")
+            let dir = cartella(r)
+            try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            let url = dir.appendingPathComponent(r.nome.t)
+            try dati.write(to: url, options: .atomic)
+            scaricati[r.id.t] = url
+            anteprima = url
+        } catch {
+            errore = error.localizedDescription
+        }
+    }
+
+    private func segnaRitirato(_ r: J) {
+        Task { _ = try? await Rete.s.chiedi("\(base)/rest/v1/vassoio?id=eq.\(r.id.t)", metodo: "PATCH", corpo: (J.obj(["ritirato_iphone": J.bool(true)])).codificato) }
     }
 
     private func peso(_ b: Double) -> String {
@@ -117,6 +194,7 @@ struct VistaVassoio: View {
         do {
             righe = try await Rete.s.righe("vassoio", "select=*&order=creato.desc", da: 0, a: 99)
             errore = nil
+            Notifiche.s.segnaVassoioVisto(righe.filter { $0.da.t == "pc" }.map { $0.id.t })
         } catch {
             errore = "Non riesco a leggere il vassoio: \(error.localizedDescription)"
         }
@@ -202,4 +280,12 @@ struct VistaVassoio: View {
         }
         lavoro = nil
     }
+}
+
+extension ISO8601DateFormatter {
+    static let conFrazioni: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return f
+    }()
 }
