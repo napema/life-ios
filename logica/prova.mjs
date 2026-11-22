@@ -134,5 +134,30 @@ prova('rank: On track e avanzamento', () => {
   return { stato: r.nomeStato, oggi: `${r.fatteOggi}/${r.richiesto}`, notifiche: n.length };
 });
 
+prova('finanze: il saldo dei pocket conta anche i movimenti retrodatati registrati dopo la correzione', () => {
+  const oggi = chiama('ui.oggiISO');
+  const ieri = chiama('ui.piuGiorni', oggi, -1);
+  const due = chiama('ui.piuGiorni', oggi, -2);
+  const saldo = () => chiama('finanze.calcolo.saldoPocket', 'contanti');
+  // una spesa vecchia, registrata PRIMA della correzione: il saldo scritto a mano la conosce già
+  chiama('finanze.dati.salvaMovimento', { id: 'm_vecchio', data: due, tipo: 'out', imp: 999, nota: 'vecchia', cat: null, sub: null, pocket: 'contanti', pocketTo: null });
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 5); // (nella realtà fra un passo e l'altro passano secondi)
+  // correggi a mano: «in contanti ho 50 €»
+  chiama('finanze.dati.riancoraPocket', 'contanti', 5000 - chiama('finanze.calcolo.deltaPocket', 'contanti', oggi), oggi);
+  const dopoCorrezione = saldo();
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 5); // (nella realtà fra un passo e l'altro passano secondi)
+  // la sera segni il gasolio del giorno prima: deve scalare
+  chiama('finanze.dati.salvaMovimento', { id: 'm_gasolio', data: ieri, tipo: 'out', imp: 5000, nota: 'gasolio', cat: null, sub: null, pocket: 'contanti', pocketTo: null });
+  const dopoGasolio = saldo();
+  // e oggi spendi altri 20: si va sotto
+  chiama('finanze.dati.salvaMovimento', { id: 'm_oggi', data: oggi, tipo: 'out', imp: 2000, nota: 'spesa', cat: null, sub: null, pocket: 'contanti', pocketTo: null });
+  const sotto = saldo();
+  // poi un rimborso datato due giorni fa: sistema il pocket da solo
+  chiama('finanze.dati.salvaMovimento', { id: 'm_rimborso', data: due, tipo: 'in', imp: 7000, nota: 'rimborso', cat: null, sub: null, pocket: 'contanti', pocketTo: null });
+  const finale = saldo();
+  if (dopoCorrezione !== 5000 || dopoGasolio !== 0 || sotto !== -2000 || finale !== 5000) throw new Error(JSON.stringify({ dopoCorrezione, dopoGasolio, sotto, finale }));
+  return { dopoCorrezione, dopoGasolio, sotto, finale };
+});
+
 console.log(errori ? `${errori} prove fallite` : 'tutte le prove passate');
 process.exit(errori ? 1 : 0);
