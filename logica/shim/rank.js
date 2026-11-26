@@ -15,6 +15,7 @@ function voce(x, oggi) {
     id: p.id, titolo: p.titolo, binario: p.binario, giorno: x.giorno, ora: p.ora,
     fra: x.giorno ? giorni(oggi, x.giorno) : null,
     voto: p.voto, risultato: p.risultato, obiettivo: p.obiettivo, note: p.note, esito: dati.conEsito(p),
+    esitoIl: p.esitoIl,
   };
 }
 
@@ -32,9 +33,19 @@ export function quadro() {
   const fisiche = analisi.analisiVoti(lista, true);
   const c = analisi.analisiCorsa(oggi);
   const cfg = dati.config();
+  const lode = cfg.lode ?? 30;
   const senza = lista.filter((x) => !dati.conEsito(x.p));
   const restanti = senza.filter((x) => x.p.binario !== 'fisica').length;
   const obiettivo = cfg.mediaObiettivo ?? null;
+  const valore = (v) => (v >= 31 ? lode : v);
+
+  const conVoto = lista.filter((x) => x.p.voto != null);
+  const mediaTutti = conVoto.length ? conVoto.reduce((t, x) => t + valore(x.p.voto), 0) / conVoto.length : null;
+  const mediaPer = (b) => {
+    const sub = conVoto.filter((x) => x.p.binario === b);
+    return { media: sub.length ? sub.reduce((t, x) => t + valore(x.p.voto), 0) / sub.length : null, n: sub.length };
+  };
+
   // On track: le prove in preparazione col loro stato, la frase, la nota e il requisito di oggi
   const mq = motore.quadro(oggi);
   const ontrack = mq.aperte.map((s) => ({
@@ -43,18 +54,26 @@ export function quadro() {
     fase: s.tipo === 'studio' ? s.fase : s.tipo === 'esercizio' ? 'test' : null, unitaTipo: s.tipo === 'studio' ? s.unitaTipo : s.tipo === 'esercizio' ? (s.misura === 'tempo' ? 'secondi' : 'ripetizioni') : null,
     richiesto: s.tipo === 'studio' ? s.richiestoOggi : null, fatteOggi: s.tipo === 'studio' ? s.fatteOggi : null, fatte: s.tipo === 'studio' ? s.fatte : null, totali: s.tipo === 'studio' ? s.totali : null,
   }));
+
+  const inArrivoLista = senza.filter((x) => !x.giorno || x.giorno >= oggi);
+
   return {
     oggi,
+    lode,
     ontrack,
-    conflitti: mq.conflitti.map((c) => c.testo),
+    conflitti: mq.conflitti.map((x) => x.testo),
     schema: mq.schema,
     daRegistrare: senza.filter((x) => x.giorno && x.giorno < oggi).map((x) => voce(x, oggi)),
-    inArrivo: senza.filter((x) => !x.giorno || x.giorno >= oggi).map((x) => voce(x, oggi)),
+    inArrivo: inArrivoLista.map((x) => voce(x, oggi)),
     fatte: lista.filter((x) => dati.conEsito(x.p)).map((x) => voce(x, oggi)).reverse(),
     studio: riassunto(studio),
     fisiche: riassunto(fisiche),
     ciSonoFisiche: lista.some((x) => x.p.binario === 'fisica'),
+    mediaTutti,
+    totaleVoti: conVoto.length,
     mediaEsami: dati.mediaEsami(),
+    mediaAccertamenti: mediaPer('accertamento'),
+    mediaFisiche: mediaPer('fisica'),
     obiettivo,
     restanti,
     traguardo: obiettivo ? analisi.cosaServe(studio.voti.map((x) => x.v), restanti, obiettivo) : null,
@@ -79,7 +98,31 @@ export function registra(id, voto, tempo) {
   const t = (tempo || '').trim();
   dati.registraEsito(id, { voto: voto ?? null, risultato: t, risultatoNum: t ? dati.numeroRisultato(t) : null }, giornoCorrente());
 }
+
+/** Crea una nuova prova (o registra direttamente un voto passato) da iPhone. */
+export function crea(binario, titolo, data, voto, risultato, note) {
+  const t = String(titolo || '').trim();
+  if (!t) return;
+  const b = binario === 'esame' || binario === 'fisica' ? binario : 'accertamento';
+  const base = dati.provaVuota(b);
+  const g = String(data || '').trim() || giornoCorrente();
+  const r = String(risultato || '').trim();
+  const haEsito = voto != null || Boolean(r);
+  dati.salvaProva({
+    ...base,
+    titolo: t,
+    materia: t,
+    data: g,
+    voto: voto ?? null,
+    risultato: r,
+    risultatoNum: r ? dati.numeroRisultato(r) : null,
+    esitoIl: haEsito ? g : null,
+    note: String(note || '').trim(),
+  });
+}
+
 export const obiettivo = (v) => dati.impostaConfig({ mediaObiettivo: v ?? null });
+export const impostaLode = (v) => dati.impostaConfig({ lode: Number(v) || 30 });
 export const mmss = analisi.mmss;
 /** Un avanzamento (pagine, capitoli…) per una prova, oggi. */
 export const avanza = (id, unita) => dati.registraAvanzamento(id, Math.round(Number(unita) || 0), giornoCorrente(), 'manuale');

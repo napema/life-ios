@@ -179,8 +179,10 @@ struct MiniApp: View {
             ]
         case "rank":
             return [
-                SchedaApp(id: "quadro", titolo: "Rank", icona: "chart.line.uptrend.xyaxis"),
-                SchedaApp(id: "prove", titolo: "Prove", icona: "list.bullet"),
+                SchedaApp(id: "quadro", titolo: "Quadro", icona: "graduationcap.fill"),
+                SchedaApp(id: "voti", titolo: "Voti", icona: "list.bullet.rectangle"),
+                SchedaApp(id: "andamento", titolo: "Andamento", icona: "chart.line.uptrend.xyaxis"),
+                altro,
             ]
         case "pasti":
             return [
